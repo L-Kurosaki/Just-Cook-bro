@@ -1,0 +1,9 @@
+{
+  "name": "Just Cook Bro",
+  "description": "A smart cooking assistant that turns chaos into a guided, organized, and enjoyable experience.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
