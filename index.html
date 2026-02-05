@@ -1,72 +1,25 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Just Cook Bro</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              primary: '#FFFFFF',
-              secondary: '#F2F2F2',
-              dark: '#2E2E2E',
-              gold: '#C9A24D',
-              midGrey: '#6B6B6B',
-              black: '#000000',
-            },
-            fontFamily: {
-              sans: ['Inter', 'sans-serif'],
-            },
-          },
-        },
-      }
-    </script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-      body {
-        background-color: #FFFFFF;
-        color: #2E2E2E;
-        font-family: 'Inter', sans-serif;
-      }
-      /* Custom scrollbar for cleaner look */
-      ::-webkit-scrollbar {
-        width: 8px;
-      }
-      ::-webkit-scrollbar-track {
-        background: #F2F2F2;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #C9A24D;
-        border-radius: 4px;
-      }
-    </style>
-  <script type="importmap">
+<script type="importmap">
 {
   "imports": {
-    "react-router-dom": "https://esm.sh/react-router-dom@^7.13.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
-    "@google/genai": "https://esm.sh/@google/genai@^1.39.0",
+    "expo": "https://esm.sh/expo@^54.0.33",
+    "react-native": "https://esm.sh/react-native@^0.83.1",
+    "@google/genai": "https://esm.sh/@google/genai@^1.40.0",
     "react": "https://esm.sh/react@^19.2.4",
     "react/": "https://esm.sh/react@^19.2.4/",
-    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.39.7",
     "lucide-react-native": "https://esm.sh/lucide-react-native@^0.563.0",
-    "react-native": "https://esm.sh/react-native@^0.83.1",
     "@react-navigation/native": "https://esm.sh/@react-navigation/native@^7.1.28",
-    "@react-native-async-storage/async-storage": "https://esm.sh/@react-native-async-storage/async-storage@^2.2.0",
-    "@react-navigation/native-stack": "https://esm.sh/@react-navigation/native-stack@^7.12.0",
-    "@react-navigation/bottom-tabs": "https://esm.sh/@react-navigation/bottom-tabs@^7.12.0",
-    "expo-image-picker": "https://esm.sh/expo-image-picker@^17.0.10",
     "expo-av": "https://esm.sh/expo-av@^16.0.8",
-    "expo": "https://esm.sh/expo@^54.0.33"
+    "@react-navigation/bottom-tabs": "https://esm.sh/@react-navigation/bottom-tabs@^7.12.0",
+    "@react-navigation/native-stack": "https://esm.sh/@react-navigation/native-stack@^7.12.0",
+    "expo-image-picker": "https://esm.sh/expo-image-picker@^17.0.10",
+    "@react-native-async-storage/async-storage": "https://esm.sh/@react-native-async-storage/async-storage@^2.2.0",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.95.1"
   }
 }
 </script>
-</head>
-  <body>
-    <div id="root"></div>
-  </body>
+<!-- This file is ignored by Expo Native builds. Entry point is index.tsx -->
+<!DOCTYPE html>
+<html>
+<body>
+</body>
 </html>
