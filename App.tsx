@@ -8,11 +8,17 @@ import Auth from './components/Auth';
 import SplashScreen from './components/SplashScreen';
 import ReviewSection from './components/ReviewSection';
 import { Recipe, StoreLocation, UserProfile, Review, SpotifyTrack } from './types';
-import { parseRecipeFromText, scanRecipeFromImage, findGroceryStores, extractTextFromImage, suggestRecipesFromImage, generateFullRecipeFromSuggestion } from './services/geminiService';
+import { parseRecipeFromText, scanRecipeFromImage, findGroceryStores, extractTextFromImage, suggestRecipesFromImage, generateFullRecipeFromSuggestion, generateRecipeFromVideoFrames, extractRecipeFromUrl } from './services/geminiService';
 import { storageService } from './services/storageService';
 import { purchases, REVENUE_CAT_API_KEY } from './services/revenueCatService';
 import { supabase, isSupabaseConfigured } from './services/supabaseClient';
-import { Camera, Link as LinkIcon, Plus, MapPin, CheckCircle, Circle, ArrowRight, ArrowLeft, Heart, ShoppingBag, Settings, Crown, LogOut, Edit3, Lock, Globe, Trash2, Image as ImageIcon, AlertTriangle, ScanText, Loader, ChefHat, Sparkles } from 'lucide-react';
+import { Camera, Link as LinkIcon, Plus, MapPin, CheckCircle, Circle, ArrowRight, ArrowLeft, Heart, ShoppingBag, Settings, Crown, LogOut, Edit3, Lock, Globe, Trash2, Image as ImageIcon, AlertTriangle, ScanText, Loader, ChefHat, Sparkles, Video, Play, Film, Eye, MonitorPlay } from 'lucide-react';
+
+// Fix for ImageCapture type missing in standard TS libs
+declare class ImageCapture {
+  constructor(track: MediaStreamTrack);
+  grabFrame(): Promise<ImageBitmap>;
+}
 
 // --- Helper Components ---
 
@@ -293,6 +299,7 @@ const CommunityScreen: React.FC = () => {
 };
 
 const DiscoverScreen: React.FC<{ onAddRecipe: (r: Recipe) => void }> = ({ onAddRecipe }) => {
+  const [activeMode, setActiveMode] = useState<'scan' | 'smart_link'>('scan');
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStage, setLoadingStage] = useState<string>("");
@@ -300,21 +307,111 @@ const DiscoverScreen: React.FC<{ onAddRecipe: (r: Recipe) => void }> = ({ onAddR
   const [suggestions, setSuggestions] = useState<Array<{title: string, description: string}>>([]);
   const [currentImage, setCurrentImage] = useState<string | null>(null);
   
+  // Smart Link State
+  const [videoUrl, setVideoUrl] = useState("");
+  const [embedHtml, setEmbedHtml] = useState<string | null>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
+  
   const navigate = useNavigate();
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // --- 1. HANDLE TEXT/LINK ANALYSIS (FALLBACK) ---
   const handleTextSubmit = async () => {
     if (!inputText.trim()) return;
     setIsLoading(true);
-    setLoadingStage("Parsing text...");
+    setLoadingStage("Analyzing Link with Google Search...");
     try {
-      const recipe = await parseRecipeFromText(inputText);
-      onAddRecipe(recipe);
-      navigate(`/recipe/${recipe.id}`);
+      // If it looks like a URL, use the enhanced URL extractor
+      if (inputText.startsWith('http')) {
+        const recipe = await extractRecipeFromUrl(inputText);
+        onAddRecipe(recipe);
+        navigate(`/recipe/${recipe.id}`);
+      } else {
+        const recipe = await parseRecipeFromText(inputText);
+        onAddRecipe(recipe);
+        navigate(`/recipe/${recipe.id}`);
+      }
     } catch (error) {
-      alert("Oops! Couldn't extract a recipe. Try pasting specific ingredients or steps.");
+      alert("Oops! Couldn't extract a recipe. Try checking the URL.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // --- 2. HANDLE VIDEO EMBEDDING ---
+  const loadVideo = () => {
+      if (!videoUrl) return;
+      // Simple YouTube ID extraction
+      const ytMatch = videoUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([^#&?]*).*/);
+      if (ytMatch) {
+          setEmbedHtml(`https://www.youtube.com/embed/${ytMatch[1]}`);
+      } else {
+          // Fallback or generic handling - we still set it so the user knows we 'loaded' it contextually
+          setEmbedHtml(null); 
+          alert("Currently optimized for YouTube. For other sites, ensure the video is visible on your screen for 'AI Watch'.");
+      }
+  };
+
+  // --- 3. HANDLE SCREEN CAPTURE (AI EYES) ---
+  const startScreenCapture = async () => {
+    try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+        const track = stream.getVideoTracks()[0];
+        const imageCapture = new ImageCapture(track);
+        
+        setIsCapturing(true);
+        setLoadingStage("AI Eyes are watching... Play the video!");
+        setIsLoading(true); // Show loading overlay but keep it minimal or custom
+
+        const frames: string[] = [];
+        const captureInterval = setInterval(async () => {
+            if (frames.length >= 10) {
+                stopCapture();
+                return;
+            }
+            try {
+                const bitmap = await imageCapture.grabFrame();
+                const canvas = document.createElement('canvas');
+                canvas.width = bitmap.width / 2; // Downscale for performance
+                canvas.height = bitmap.height / 2;
+                const ctx = canvas.getContext('2d');
+                ctx?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+                const base64 = canvas.toDataURL('image/jpeg', 0.6).replace(/^.+,/, "");
+                frames.push(base64);
+                setLoadingStage(`Captured frame ${frames.length}/10...`);
+            } catch (e) {
+                console.error("Frame capture error", e);
+            }
+        }, 2000); // Capture every 2 seconds
+
+        const stopCapture = async () => {
+            clearInterval(captureInterval);
+            track.stop();
+            setIsCapturing(false);
+            setLoadingStage("Analyzing captured video footage...");
+            
+            try {
+                const recipe = await generateRecipeFromVideoFrames(frames);
+                onAddRecipe(recipe);
+                navigate(`/recipe/${recipe.id}`);
+            } catch (e) {
+                alert("Could not analyze video footage.");
+                setIsLoading(false);
+            }
+        };
+
+        // If user manually stops sharing
+        track.onended = () => {
+             if (frames.length > 0) stopCapture();
+             else {
+                 setIsCapturing(false);
+                 setIsLoading(false);
+             }
+        };
+
+    } catch (err) {
+        console.error("Screen capture cancelled", err);
+        setIsLoading(false);
     }
   };
 
@@ -330,7 +427,6 @@ const DiscoverScreen: React.FC<{ onAddRecipe: (r: Recipe) => void }> = ({ onAddR
         const base64String = (reader.result as string).replace("data:", "").replace(/^.+,/, "");
         setCurrentImage(base64String);
         try {
-            // Step 1: Get Suggestions
             const options = await suggestRecipesFromImage(base64String);
             setSuggestions(options);
         } catch (err) {
@@ -352,7 +448,6 @@ const DiscoverScreen: React.FC<{ onAddRecipe: (r: Recipe) => void }> = ({ onAddR
       setIsLoading(true);
       setLoadingStage(`Creating recipe for ${suggestion.title}...`);
       try {
-          // Step 2: Generate Full Recipe
           const recipe = await generateFullRecipeFromSuggestion(suggestion, currentImage);
           onAddRecipe(recipe);
           navigate(`/recipe/${recipe.id}`);
@@ -370,17 +465,23 @@ const DiscoverScreen: React.FC<{ onAddRecipe: (r: Recipe) => void }> = ({ onAddR
   // --- UI: Loading ---
   if (isLoading) {
       return (
-        <div className="flex flex-col items-center justify-center py-20 animate-pulse h-full">
+        <div className="flex flex-col items-center justify-center py-20 animate-pulse h-full p-6 text-center">
            <div className="w-16 h-16 bg-gold rounded-full mb-6 flex items-center justify-center">
              <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
            </div>
-           <p className="text-dark font-bold text-lg mb-2">Chef is working...</p>
+           <p className="text-dark font-bold text-lg mb-2">{isCapturing ? "AI Watching..." : "Chef is working..."}</p>
            <p className="text-xs text-midGrey">{loadingStage}</p>
+           {isCapturing && (
+               <div className="mt-8 bg-red-50 text-red-500 border border-red-200 px-4 py-2 rounded-full flex items-center gap-2 animate-bounce">
+                   <div className="w-3 h-3 bg-red-500 rounded-full" />
+                   <span className="text-xs font-bold uppercase">Recording Screen</span>
+               </div>
+           )}
         </div>
       );
   }
 
-  // --- UI: Selection Grid (Step 2) ---
+  // --- UI: Selection Grid (Step 2 of Image) ---
   if (suggestions.length > 0) {
       return (
           <div className="p-6 h-full flex flex-col">
@@ -416,59 +517,116 @@ const DiscoverScreen: React.FC<{ onAddRecipe: (r: Recipe) => void }> = ({ onAddR
     <div className="p-6">
       <h2 className="text-2xl font-bold text-dark mb-6">Add a Recipe</h2>
 
+      {/* Tabs */}
+      <div className="flex gap-2 mb-6 bg-secondary p-1 rounded-xl">
+          <button onClick={() => setActiveMode('scan')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${activeMode === 'scan' ? 'bg-white shadow-sm text-dark' : 'text-midGrey'}`}>Photo Scan</button>
+          <button onClick={() => setActiveMode('smart_link')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${activeMode === 'smart_link' ? 'bg-white shadow-sm text-dark' : 'text-midGrey'}`}>Smart Link</button>
+      </div>
+
       <div className="space-y-6">
-          <div 
-            onClick={() => fileInputRef.current?.click()}
-            className="bg-secondary p-6 rounded-xl flex items-center justify-between cursor-pointer active:scale-[0.98] transition-transform border border-transparent hover:border-gold/30"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-gold shadow-sm">
-                <Camera size={24} />
+
+          {/* PHOTO MODE */}
+          {activeMode === 'scan' && (
+             <div 
+                onClick={() => fileInputRef.current?.click()}
+                className="bg-secondary p-8 rounded-xl flex flex-col items-center justify-center gap-4 cursor-pointer active:scale-[0.98] transition-transform border-2 border-dashed border-gray-300 hover:border-gold"
+            >
+                <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center text-gold shadow-sm">
+                    <Camera size={32} />
+                </div>
+                <div className="text-center">
+                    <h3 className="font-bold text-dark text-lg">Scan Ingredients</h3>
+                    <p className="text-xs text-midGrey mt-1">Take a photo of food to get recipes</p>
+                </div>
+                <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
+             </div>
+          )}
+
+          {/* SMART LINK MODE */}
+          {activeMode === 'smart_link' && (
+              <div className="space-y-4">
+                  
+                  {/* Link Input Section */}
+                  <div className="bg-white border border-secondary p-6 rounded-xl shadow-sm">
+                        <div className="flex items-center gap-2 mb-4">
+                            <LinkIcon size={18} className="text-gold" />
+                            <h3 className="font-bold text-dark">Paste URL</h3>
+                        </div>
+                        <input
+                            className="w-full bg-secondary p-4 rounded-lg text-sm text-dark focus:outline-none focus:ring-2 focus:ring-gold/50 mb-4"
+                            placeholder="https://youtube.com/watch?v=..."
+                            value={inputText}
+                            onChange={(e) => {
+                                setInputText(e.target.value);
+                                setVideoUrl(e.target.value); // Sync for video embed
+                                setEmbedHtml(null); // Reset embed when typing
+                            }}
+                        />
+                        <div className="flex gap-2">
+                             <button 
+                                onClick={handleTextSubmit}
+                                disabled={!inputText}
+                                className="flex-1 py-3 bg-secondary text-dark rounded-xl font-bold text-xs"
+                             >
+                                Extract Text
+                             </button>
+                             <button 
+                                onClick={loadVideo}
+                                disabled={!inputText}
+                                className="flex-1 py-3 bg-dark text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2"
+                             >
+                                <Play size={12} fill="currentColor" /> Load Video
+                             </button>
+                        </div>
+                  </div>
+
+                  {/* Video Player & AI Eyes Section */}
+                  {embedHtml && (
+                      <div className="bg-black rounded-xl overflow-hidden shadow-lg animate-fade-in">
+                          <iframe 
+                            width="100%" 
+                            height="240" 
+                            src={embedHtml} 
+                            title="Video player" 
+                            frameBorder="0" 
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                            allowFullScreen
+                          ></iframe>
+                          
+                          <div className="p-4 bg-dark text-white">
+                              <h4 className="font-bold text-sm mb-2 flex items-center gap-2">
+                                  <MonitorPlay size={16} className="text-gold" /> AI Video Analysis
+                              </h4>
+                              <p className="text-[10px] text-gray-400 mb-4">
+                                  Press "Start AI Eyes", select this window, then play the video. The AI will watch and extract the recipe from visuals.
+                              </p>
+                              <button 
+                                onClick={startScreenCapture}
+                                className="w-full bg-gold text-white py-3 rounded-lg font-bold text-sm flex items-center justify-center gap-2 hover:bg-[#B89240] transition-colors"
+                              >
+                                  <Eye size={18} /> Start AI Eyes
+                              </button>
+                          </div>
+                      </div>
+                  )}
+
+                  {!embedHtml && inputText && (
+                       <div className="text-center p-4">
+                           <p className="text-xs text-midGrey">Load the video to enable AI Visual Analysis.</p>
+                       </div>
+                  )}
+
               </div>
-              <div>
-                <h3 className="font-bold text-dark text-lg">Generate Recipe</h3>
-                <p className="text-xs text-midGrey">Scan food -> Get Internet Recipes</p>
-              </div>
-            </div>
-            <ArrowRight size={20} className="text-midGrey" />
-            <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
-          </div>
+          )}
 
           <div 
             onClick={() => setShowManual(true)}
-            className="bg-secondary p-6 rounded-xl flex items-center justify-between cursor-pointer active:scale-[0.98] transition-transform border border-transparent hover:border-gold/30"
+            className="flex items-center justify-center gap-2 p-4 text-midGrey hover:text-dark transition-colors cursor-pointer"
           >
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-gold shadow-sm">
-                <Edit3 size={24} />
-              </div>
-              <div>
-                <h3 className="font-bold text-dark text-lg">Create Manually</h3>
-                <p className="text-xs text-midGrey">Type or OCR scan text</p>
-              </div>
-            </div>
-            <ArrowRight size={20} className="text-midGrey" />
+            <Edit3 size={16} />
+            <span className="text-xs font-bold">Or create manually</span>
           </div>
 
-          <div className="bg-white border border-secondary p-6 rounded-xl shadow-sm">
-            <div className="flex items-center gap-2 mb-4">
-                <LinkIcon size={18} className="text-gold" />
-                <h3 className="font-bold text-dark">Paste Link or Text</h3>
-            </div>
-            <textarea
-              className="w-full bg-secondary p-4 rounded-lg text-sm text-dark focus:outline-none focus:ring-2 focus:ring-gold/50 min-h-[120px]"
-              placeholder="Paste a URL or type instructions here..."
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-            />
-            <button 
-              onClick={handleTextSubmit}
-              disabled={!inputText}
-              className={`w-full mt-4 py-3 rounded-xl font-bold text-sm transition-colors ${inputText ? 'bg-gold text-white shadow-md' : 'bg-secondary text-midGrey'}`}
-            >
-              Parse Recipe
-            </button>
-          </div>
         </div>
     </div>
   );

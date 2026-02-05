@@ -83,6 +83,86 @@ export const parseRecipeFromText = async (text: string): Promise<Recipe> => {
 };
 
 /**
+ * Analyzes a URL (YouTube, Blog, etc.) using Google Search grounding to extract recipe details
+ * from descriptions, captions, or web content.
+ */
+export const extractRecipeFromUrl = async (url: string): Promise<Recipe> => {
+    const model = "gemini-3-flash-preview";
+
+    const prompt = `
+      I have this URL: ${url}
+      
+      Tasks:
+      1. Visit the URL or search for it to find the full content.
+      2. If it is a video (YouTube, TikTok), extract the recipe from the description, captions, or comments summary.
+      3. If it is a blog post, extract the recipe details.
+      4. Format the output into a structured JSON recipe.
+      5. Infer missing details like prepTime if not explicitly stated.
+    `;
+
+    const response = await ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: {
+            tools: [{ googleSearch: {} }],
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    title: { type: Type.STRING },
+                    description: { type: Type.STRING },
+                    prepTime: { type: Type.STRING },
+                    cookTime: { type: Type.STRING },
+                    servings: { type: Type.NUMBER },
+                    ingredients: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                name: { type: Type.STRING },
+                                amount: { type: Type.STRING },
+                                category: { type: Type.STRING },
+                            },
+                        },
+                    },
+                    steps: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                instruction: { type: Type.STRING },
+                                timeInSeconds: { type: Type.NUMBER },
+                                tip: { type: Type.STRING },
+                                warning: { type: Type.STRING },
+                                actionVerb: { type: Type.STRING },
+                            },
+                        },
+                    },
+                    musicMood: { type: Type.STRING },
+                    dietaryTags: { type: Type.ARRAY, items: { type: Type.STRING } },
+                    allergens: { type: Type.ARRAY, items: { type: Type.STRING } },
+                },
+                required: ["title", "ingredients", "steps"],
+            },
+        }
+    });
+
+    const rawRecipe = JSON.parse(response.text || "{}");
+
+    return {
+        ...rawRecipe,
+        id: crypto.randomUUID(),
+        imageUrl: "https://picsum.photos/800/600", // Placeholder until we can extract image from URL metadata
+        sourceUrl: url,
+        isPremium: false,
+        author: "Web Import",
+        reviews: [],
+        isPublic: false,
+        isOffline: false
+    };
+};
+
+/**
  * Step 1 of Image Gen: Suggests 6 recipes based on the image + internet search.
  */
 export const suggestRecipesFromImage = async (base64Image: string): Promise<Array<{ title: string, description: string }>> => {
@@ -205,6 +285,89 @@ export const generateFullRecipeFromSuggestion = async (suggestion: { title: stri
         isPublic: false,
         isOffline: false
     };
+};
+
+/**
+ * Analyzes a sequence of video frames to extract a recipe.
+ * This handles cases where audio is missing/music-only and instructions are on-screen text.
+ */
+export const generateRecipeFromVideoFrames = async (frames: string[]): Promise<Recipe> => {
+  const model = "gemini-3-pro-preview"; // Using Pro for better multimodal reasoning
+
+  const prompt = `
+    You are analyzing a sequence of frames from a cooking video.
+    
+    TASKS:
+    1. READ ON-SCREEN TEXT: Look closely at captions, text overlays, and subtitles embedded in the images. These often contain ingredients and quantities.
+    2. ANALYZE VISUAL ACTIONS: Identify what is happening in the frames (e.g., chopping, sautéing, mixing) even if there is no text.
+    3. IGNORE BACKGROUND MUSIC: Do not assume audio context exists. Rely on the visual information.
+    4. CONSTRUCT RECIPE: Create a structured recipe based on the visual sequence.
+  `;
+
+  // Construct parts: Prompt + All Frames
+  const parts: any[] = [{ text: prompt }];
+  frames.forEach(base64 => {
+    parts.push({ inlineData: { mimeType: "image/jpeg", data: base64 } });
+  });
+
+  const response = await ai.models.generateContent({
+    model,
+    contents: { parts },
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING },
+          description: { type: Type.STRING },
+          prepTime: { type: Type.STRING },
+          cookTime: { type: Type.STRING },
+          servings: { type: Type.NUMBER },
+          ingredients: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING },
+                amount: { type: Type.STRING },
+                category: { type: Type.STRING },
+              },
+            },
+          },
+          steps: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                instruction: { type: Type.STRING },
+                timeInSeconds: { type: Type.NUMBER },
+                tip: { type: Type.STRING },
+                warning: { type: Type.STRING },
+                actionVerb: { type: Type.STRING },
+              },
+            },
+          },
+          musicMood: { type: Type.STRING },
+          dietaryTags: { type: Type.ARRAY, items: { type: Type.STRING } },
+          allergens: { type: Type.ARRAY, items: { type: Type.STRING } },
+        },
+        required: ["title", "ingredients", "steps"],
+      },
+    },
+  });
+
+  const rawRecipe = JSON.parse(response.text || "{}");
+
+  return {
+    ...rawRecipe,
+    id: crypto.randomUUID(),
+    imageUrl: frames.length > 0 ? `data:image/jpeg;base64,${frames[Math.floor(frames.length / 2)]}` : "https://picsum.photos/800/600",
+    isPremium: false,
+    author: "Video AI",
+    reviews: [],
+    isPublic: false,
+    isOffline: false
+  };
 };
 
 /**
