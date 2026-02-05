@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import { View, Text, ScrollView, ActivityIndicator } from 'react-native';
 import { storageService } from '../services/storageService';
 import { Notification } from '../types';
-import { Heart, Bookmark, MessageCircle, Bell } from 'lucide-react';
+import { Heart, Bookmark, MessageCircle, Bell } from 'lucide-react-native';
 
 const NotificationsScreen: React.FC = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -18,46 +19,46 @@ const NotificationsScreen: React.FC = () => {
 
   const getIcon = (type: string) => {
     switch (type) {
-      case 'save': return <Bookmark className="text-gold" size={20} />;
-      case 'cook': return <Heart className="text-red-500" size={20} />;
-      case 'review': return <MessageCircle className="text-blue-500" size={20} />;
-      default: return <Bell className="text-midGrey" size={20} />;
+      case 'save': return <Bookmark color="#C9A24D" size={20} />;
+      case 'cook': return <Heart color="#EF4444" size={20} />;
+      case 'review': return <MessageCircle color="#3B82F6" size={20} />;
+      default: return <Bell color="#6B6B6B" size={20} />;
     }
   };
 
   return (
-    <div className="p-6">
-      <h2 className="text-2xl font-bold text-dark mb-6">Notifications</h2>
+    <ScrollView className="flex-1 bg-white p-6">
+      <Text className="text-2xl font-bold text-dark mb-6">Notifications</Text>
       
       {loading ? (
-        <div className="text-center text-midGrey text-sm py-10">Checking alerts...</div>
+        <ActivityIndicator color="#C9A24D" />
       ) : notifications.length === 0 ? (
-        <div className="text-center py-20 bg-secondary rounded-xl">
-           <Bell className="w-12 h-12 text-midGrey mx-auto mb-4 opacity-50" />
-           <p className="text-midGrey font-medium">No new activity.</p>
-           <p className="text-xs text-midGrey mt-1">Post public recipes to get engagement!</p>
-        </div>
+        <View className="py-20 bg-secondary rounded-xl items-center justify-center">
+           <Bell size={48} color="#9CA3AF" />
+           <Text className="text-midGrey font-medium mt-4">No new activity.</Text>
+           <Text className="text-xs text-midGrey mt-1">Post public recipes to get engagement!</Text>
+        </View>
       ) : (
-        <div className="space-y-4">
+        <View className="gap-4 pb-20">
           {notifications.map((notif) => (
-            <div key={notif.id} className={`p-4 rounded-xl flex gap-4 ${notif.read ? 'bg-white border border-secondary' : 'bg-gold/5 border border-gold/20'}`}>
-              <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm shrink-0">
+            <View key={notif.id} className={`p-4 rounded-xl flex-row gap-4 ${notif.read ? 'bg-white border border-secondary' : 'bg-orange-50 border border-gold/20'}`}>
+              <View className="w-10 h-10 bg-white rounded-full items-center justify-center shadow-sm">
                 {getIcon(notif.type)}
-              </div>
-              <div>
-                <p className="text-sm text-dark leading-snug">
-                  <span className="font-bold">{notif.actorName}</span>{' '}
+              </View>
+              <View className="flex-1">
+                <Text className="text-sm text-dark">
+                  <Text className="font-bold">{notif.actorName}</Text>{' '}
                   {notif.message.replace(notif.actorName, '')}
-                </p>
-                <p className="text-[10px] text-midGrey mt-1">
-                  {new Date(notif.date).toLocaleDateString()} at {new Date(notif.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                </p>
-              </div>
-            </div>
+                </Text>
+                <Text className="text-[10px] text-midGrey mt-1">
+                  {new Date(notif.date).toLocaleDateString()}
+                </Text>
+              </View>
+            </View>
           ))}
-        </div>
+        </View>
       )}
-    </div>
+    </ScrollView>
   );
 };
 

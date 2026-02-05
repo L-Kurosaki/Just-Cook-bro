@@ -1,53 +1,34 @@
-import { Recipe, UserProfile, Notification } from "../types";
+import { Recipe, UserProfile, Notification, ShopItem } from "../types";
 import { supabase, isSupabaseConfigured } from "./supabaseClient";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const RECIPE_KEY = "jcb_recipes";
 const PROFILE_KEY = "jcb_profile";
 const NOTIFICATIONS_KEY = "jcb_notifications";
+const SHOPPING_KEY = "jcb_shopping_list";
+
+// --- Local Storage Helpers ---
+const getLocal = async <T>(key: string): Promise<T | null> => {
+  try {
+    const data = await AsyncStorage.getItem(key);
+    return data ? JSON.parse(data) : null;
+  } catch (e) {
+    console.error("Local storage read error", e);
+    return null;
+  }
+};
+
+const setLocal = async (key: string, data: any) => {
+  try {
+    await AsyncStorage.setItem(key, JSON.stringify(data));
+  } catch (e) {
+    console.error("Local storage write error", e);
+  }
+};
 
 export const storageService = {
-  saveRecipes: async (recipes: Recipe[], userId?: string) => {
-    // 1. Try Supabase if configured and user is logged in
-    if (isSupabaseConfigured() && userId) {
-      try {
-        for (const recipe of recipes) {
-           const { error } = await supabase
-            .from('recipes')
-            .upsert({ 
-                id: recipe.id,
-                user_id: userId,
-                title: recipe.title, 
-                content: recipe 
-            });
-           if (error) console.error("Supabase Save Error:", error);
-        }
-        return;
-      } catch (e) {
-        console.error("Supabase connection failed", e);
-      }
-    }
-
-    // 2. Fallback to LocalStorage
-    try {
-      localStorage.setItem(RECIPE_KEY, JSON.stringify(recipes));
-    } catch (e: any) {
-      if (
-        e.name === 'QuotaExceededError' || 
-        e.name === 'NS_ERROR_DOM_QUOTA_REACHED'
-      ) {
-        console.warn("Storage quota exceeded. Compressing...");
-        const compressed = recipes.map(r => ({
-          ...r,
-          imageUrl: r.imageUrl?.startsWith('data:') ? 'https://via.placeholder.com/800?text=Image+Saved+Online' : r.imageUrl
-        }));
-        try {
-          localStorage.setItem(RECIPE_KEY, JSON.stringify(compressed));
-        } catch (err) {
-          console.error("Critical storage failure");
-        }
-      }
-    }
-  },
+  
+  // --- RECIPES ---
 
   getRecipes: async (userId?: string): Promise<Recipe[]> => {
     // 1. Try Supabase
@@ -55,37 +36,89 @@ export const storageService = {
       const { data, error } = await supabase
         .from('recipes')
         .select('content')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
         
       if (!error && data) {
         return data.map((row: any) => row.content as Recipe);
       }
     }
 
-    // 2. Fallback
-    try {
-      const data = localStorage.getItem(RECIPE_KEY);
-      return data ? JSON.parse(data) : [];
-    } catch (e) {
-      return [];
-    }
+    // 2. Fallback to Local
+    return (await getLocal<Recipe[]>(RECIPE_KEY)) || [];
   },
 
+  addRecipe: async (recipe: Recipe, userId?: string) => {
+    // 1. Supabase
+    if (isSupabaseConfigured() && userId) {
+      await supabase
+        .from('recipes')
+        .insert({
+          id: recipe.id,
+          user_id: userId,
+          title: recipe.title,
+          is_public: recipe.isPublic || false,
+          content: recipe
+        });
+    }
+
+    // 2. Local Sync
+    const current = (await getLocal<Recipe[]>(RECIPE_KEY)) || [];
+    await setLocal(RECIPE_KEY, [recipe, ...current]);
+  },
+
+  updateRecipe: async (recipe: Recipe, userId?: string) => {
+    // 1. Supabase
+    if (isSupabaseConfigured() && userId) {
+      await supabase
+        .from('recipes')
+        .update({
+          title: recipe.title,
+          is_public: recipe.isPublic || false,
+          content: recipe
+        })
+        .eq('id', recipe.id)
+        .eq('user_id', userId);
+    }
+
+    // 2. Local Sync
+    const current = (await getLocal<Recipe[]>(RECIPE_KEY)) || [];
+    const updated = current.map(r => r.id === recipe.id ? recipe : r);
+    await setLocal(RECIPE_KEY, updated);
+  },
+
+  deleteRecipe: async (recipeId: string, userId?: string) => {
+    // 1. Supabase
+    if (isSupabaseConfigured() && userId) {
+      await supabase
+        .from('recipes')
+        .delete()
+        .eq('id', recipeId)
+        .eq('user_id', userId);
+    }
+
+    // 2. Local Sync
+    const current = (await getLocal<Recipe[]>(RECIPE_KEY)) || [];
+    const updated = current.filter(r => r.id !== recipeId);
+    await setLocal(RECIPE_KEY, updated);
+  },
+
+  // --- PUBLIC / COMMUNITY ---
+
   getPublicRecipes: async (): Promise<Recipe[]> => {
-    // 1. Try Supabase
     if (isSupabaseConfigured()) {
         const { data, error } = await supabase
           .from('recipes')
           .select('content')
           .eq('is_public', true) 
-          .limit(20);
+          .limit(50);
           
         if (!error && data) {
             return data.map((row: any) => row.content as Recipe);
         }
     }
 
-    // 2. Return Mock Data with Social Stats
+    // Fallback Mock Data
     return [
         {
             id: 'comm-1',
@@ -118,99 +151,75 @@ export const storageService = {
             reviews: [],
             saves: 89,
             cooks: 12
-        },
-        {
-            id: 'comm-3',
-            title: 'Ultimate Avocado Toast',
-            description: 'The breakfast of champions.',
-            prepTime: '5 min',
-            cookTime: '5 min',
-            servings: 1,
-            ingredients: [],
-            steps: [],
-            imageUrl: 'https://images.unsplash.com/photo-1588137372308-15f75323a51d?w=800',
-            isPublic: true,
-            author: 'Green Eater',
-            reviews: [],
-            saves: 230,
-            cooks: 150
         }
     ];
   },
 
-  // --- Social / Notifications ---
-
-  getNotifications: async (): Promise<Notification[]> => {
-    // In a real app, fetch from Supabase 'notifications' table.
-    // Here we return mock data + localStorage data
-    try {
-        const local = localStorage.getItem(NOTIFICATIONS_KEY);
-        const parsed: Notification[] = local ? JSON.parse(local) : [];
-        
-        // Combine with some fake "incoming" notifications for demo purposes
-        const demoNotifs: Notification[] = [
-            {
-                id: 'n-1',
-                type: 'save',
-                message: 'Chef Alex saved your "Grandma\'s Pie" recipe!',
-                date: new Date(Date.now() - 10000000).toISOString(),
-                read: false,
-                actorName: 'Chef Alex'
-            },
-            {
-                id: 'n-2',
-                type: 'cook',
-                message: 'Maria C. just cooked your "Spicy Pasta".',
-                date: new Date(Date.now() - 50000000).toISOString(),
-                read: true,
-                actorName: 'Maria C.'
-            }
-        ];
-        
-        // Merge and dedupe
-        const combined = [...parsed, ...demoNotifs].filter((v,i,a)=>a.findIndex(t=>(t.id === v.id))===i);
-        return combined.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    } catch (e) {
-        return [];
-    }
-  },
-
-  // Called when YOU save someone else's recipe
   saveCommunityRecipe: async (recipe: Recipe, myUserId?: string) => {
-     // 1. Add to my recipes (Clone it)
-     const myCopy = { ...recipe, id: crypto.randomUUID(), isPublic: false, sourceUrl: `Community: ${recipe.author}` };
-     const myRecipes = await storageService.getRecipes(myUserId);
-     await storageService.saveRecipes([myCopy, ...myRecipes], myUserId);
+     return { 
+         ...recipe, 
+         id: crypto.randomUUID(), 
+         isPublic: false, 
+         sourceUrl: `Community: ${recipe.author}`,
+         originalAuthor: recipe.originalAuthor || recipe.author,
+         originalSource: 'Just Cook Bro Community'
+     };
+  },
 
-     // 2. Simulate notifying the original author (Client-side simulation)
-     // In a real app, this would be an API call: POST /api/recipe/${recipe.id}/save
-     console.log(`[Social] Notified ${recipe.author} that you saved their recipe.`);
-     return myCopy;
-  },
-  
-  // Called when YOU cook a recipe
-  markRecipeAsCooked: async (recipe: Recipe) => {
-     // Logic to increment 'cooks' count on the server
-     console.log(`[Social] Incrementing cook count for ${recipe.title}`);
-  },
+  // --- PROFILES ---
 
   saveProfile: async (profile: UserProfile, userId?: string) => {
-    localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+    await setLocal(PROFILE_KEY, profile);
     
     if (isSupabaseConfigured() && userId) {
         await supabase.from('profiles').upsert({
             id: userId,
-            is_premium: profile.isPremium
+            is_premium: profile.isPremium,
+            dietary_preferences: profile.dietaryPreferences,
+            allergies: profile.allergies,
+            is_delete_locked: profile.isDeleteLocked,
+            music_history: profile.musicHistory,
+            custom_collections: profile.customCollections
         });
     }
   },
 
-  getProfile: (): UserProfile | null => {
-    try {
-      const data = localStorage.getItem(PROFILE_KEY);
-      return data ? JSON.parse(data) : null;
-    } catch (e) {
-      return null;
+  getProfile: async (userId?: string): Promise<UserProfile | null> => {
+    if (isSupabaseConfigured() && userId) {
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .single();
+            
+        if (!error && data) {
+            return {
+                name: data.email || "Chef",
+                email: data.email,
+                isPremium: data.is_premium,
+                dietaryPreferences: data.dietary_preferences || [],
+                allergies: data.allergies || [],
+                isDeleteLocked: data.is_delete_locked || false,
+                musicHistory: data.music_history || [],
+                customCollections: data.custom_collections || []
+            };
+        }
     }
+
+    return await getLocal<UserProfile>(PROFILE_KEY);
+  },
+
+  getNotifications: async (): Promise<Notification[]> => {
+    return (await getLocal<Notification[]>(NOTIFICATIONS_KEY)) || [];
+  },
+
+  // --- SHOPPING LIST ---
+
+  getShoppingList: async (): Promise<ShopItem[]> => {
+     return (await getLocal<ShopItem[]>(SHOPPING_KEY)) || [];
+  },
+
+  saveShoppingList: async (items: ShopItem[]) => {
+     await setLocal(SHOPPING_KEY, items);
   }
 };

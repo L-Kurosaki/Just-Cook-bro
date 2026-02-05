@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Star, Send } from 'lucide-react';
+import { View, Text, TextInput, TouchableOpacity } from 'react-native';
+import { Star, Send } from 'lucide-react-native';
 import { Review } from '../types';
 
 interface ReviewSectionProps {
@@ -21,52 +22,56 @@ const ReviewSection: React.FC<ReviewSectionProps> = ({ reviews, onAddReview, can
   };
 
   return (
-    <div className="mt-8 pt-6 border-t border-secondary">
-      <h3 className="font-bold text-lg mb-4">Community Feedback ({reviews.length})</h3>
+    <View className="mt-8 pt-6 border-t border-secondary">
+      <Text className="font-bold text-lg mb-4 text-dark">Community Feedback ({reviews.length})</Text>
       
       {/* List */}
-      <div className="space-y-4 mb-6">
-        {reviews.length === 0 && <p className="text-sm text-midGrey italic">No reviews yet. Be the first!</p>}
+      <View className="mb-6">
+        {reviews.length === 0 && <Text className="text-sm text-midGrey italic">No reviews yet. Be the first!</Text>}
         {reviews.map((r) => (
-          <div key={r.id} className="bg-secondary p-4 rounded-xl">
-             <div className="flex justify-between items-start mb-2">
-               <span className="font-bold text-xs">{r.userName}</span>
-               <div className="flex text-gold">
+          <View key={r.id} className="bg-secondary p-4 rounded-xl mb-3">
+             <View className="flex-row justify-between items-start mb-2">
+               <Text className="font-bold text-xs text-dark">{r.userName}</Text>
+               <View className="flex-row">
                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} size={10} fill={i < r.rating ? "currentColor" : "none"} />
+                    <Star key={i} size={12} color="#C9A24D" fill={i < r.rating ? "#C9A24D" : "transparent"} />
                  ))}
-               </div>
-             </div>
-             <p className="text-sm text-dark">{r.comment}</p>
-          </div>
+               </View>
+             </View>
+             <Text className="text-sm text-dark">{r.comment}</Text>
+          </View>
         ))}
-      </div>
+      </View>
 
       {/* Add Review */}
       {canReview && (
-        <div className="bg-white border border-secondary p-4 rounded-xl">
-           <p className="text-xs font-bold mb-2">Rate this recipe</p>
-           <div className="flex gap-2 mb-3">
+        <View className="bg-white border border-secondary p-4 rounded-xl">
+           <Text className="text-xs font-bold mb-2 text-dark">Rate this recipe</Text>
+           <View className="flex-row gap-2 mb-3">
              {[1,2,3,4,5].map((s) => (
-                <button key={s} onClick={() => setRating(s)}>
-                  <Star size={24} className={s <= rating ? "text-gold fill-current" : "text-gray-300"} />
-                </button>
+                <TouchableOpacity key={s} onPress={() => setRating(s)}>
+                  <Star size={28} color={s <= rating ? "#C9A24D" : "#D1D5DB"} fill={s <= rating ? "#C9A24D" : "transparent"} />
+                </TouchableOpacity>
              ))}
-           </div>
-           <div className="flex gap-2">
-             <input 
+           </View>
+           <View className="flex-row gap-2 items-center">
+             <TextInput 
                 value={comment}
-                onChange={(e) => setComment(e.target.value)}
+                onChangeText={setComment}
                 placeholder="Share your experience..."
-                className="flex-1 bg-secondary rounded-lg px-3 text-sm focus:outline-none"
+                className="flex-1 bg-secondary rounded-lg px-3 py-2 text-sm text-dark"
              />
-             <button onClick={handleSubmit} disabled={!rating || !comment} className="bg-gold text-white p-2 rounded-lg disabled:opacity-50">
-               <Send size={16} />
-             </button>
-           </div>
-        </div>
+             <TouchableOpacity 
+                onPress={handleSubmit} 
+                disabled={!rating || !comment} 
+                className={`p-3 rounded-lg ${!rating || !comment ? 'bg-gray-300' : 'bg-gold'}`}
+             >
+               <Send size={16} color="white" />
+             </TouchableOpacity>
+           </View>
+        </View>
       )}
-    </div>
+    </View>
   );
 };
 

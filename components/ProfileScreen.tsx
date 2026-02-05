@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, TextInput, Alert, Share, Image } from 'react-native';
 import { UserProfile } from '../types';
-import { Crown, LogOut, Settings, History, Music, Share2 } from 'lucide-react';
+import { Crown, LogOut, Music, Share2, ChevronRight } from 'lucide-react-native';
 import Paywall from './Paywall';
 
 interface ProfileScreenProps {
@@ -26,141 +27,159 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ userProfile, setPremium, 
         setEditMode(false);
     };
 
-    const handleShareMusic = () => {
+    const handleShareMusic = async () => {
         if (!userProfile.musicHistory || userProfile.musicHistory.length === 0) return;
         
         const text = "🎵 My Kitchen Jams from Just Cook Bro:\n" + 
                      userProfile.musicHistory.slice(0, 5).map(t => `- ${t.name} by ${t.artist}`).join('\n') +
                      "\n...and more!";
         
-        if (navigator.share) {
-            navigator.share({ title: 'My Cooking Playlist', text }).catch(console.error);
-        } else {
-            navigator.clipboard.writeText(text);
-            alert("Playlist copied to clipboard!");
+        try {
+            await Share.share({ message: text });
+        } catch (error) {
+            console.error(error);
         }
     };
 
     return (
-        <div className="p-6">
-            <h2 className="text-2xl font-bold text-dark mb-6">Profile</h2>
+        <ScrollView className="flex-1 bg-white p-6">
+            <Text className="text-2xl font-bold text-dark mb-6">Profile</Text>
             
-            <div className="bg-secondary p-6 rounded-2xl flex items-center gap-4 mb-6">
-                <div className="w-16 h-16 bg-gold text-white rounded-full flex items-center justify-center text-xl font-bold shadow-lg">
-                    {userProfile.name.charAt(0)}
-                </div>
-                <div>
-                    <h3 className="font-bold text-lg">{userProfile.name}</h3>
-                    <div className="flex items-center gap-1">
+            <View className="bg-secondary p-6 rounded-2xl flex-row items-center gap-4 mb-6">
+                <View className="w-16 h-16 bg-gold rounded-full items-center justify-center shadow-lg">
+                    <Text className="text-white text-xl font-bold">{userProfile.name.charAt(0)}</Text>
+                </View>
+                <View>
+                    <Text className="font-bold text-lg text-dark">{userProfile.name}</Text>
+                    <View className="flex-row items-center gap-1 mt-1">
                         {userProfile.isPremium ? (
-                            <span className="bg-dark text-gold text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                                <Crown size={10} /> PRO MEMBER
-                            </span>
+                            <View className="bg-dark px-2 py-0.5 rounded-full flex-row items-center gap-1">
+                                <Crown size={10} color="#C9A24D" />
+                                <Text className="text-gold text-[10px] font-bold">PRO MEMBER</Text>
+                            </View>
                         ) : (
-                            <span className="bg-white text-midGrey text-[10px] font-bold px-2 py-0.5 rounded-full border border-gray-200">
-                                Free Plan
-                            </span>
+                            <View className="bg-white px-2 py-0.5 rounded-full border border-gray-200">
+                                <Text className="text-midGrey text-[10px] font-bold">Free Plan</Text>
+                            </View>
                         )}
-                    </div>
-                </div>
-            </div>
+                    </View>
+                </View>
+            </View>
 
             {/* Music History Section */}
-            <div className="bg-white border border-secondary rounded-xl p-4 mb-6">
-                 <div className="flex justify-between items-center mb-2" onClick={() => setShowMusicHistory(!showMusicHistory)}>
-                     <div className="flex items-center gap-2">
-                         <Music size={18} className="text-[#1DB954]" />
-                         <h3 className="font-bold text-sm">Music Logs</h3>
-                     </div>
-                     <button className="text-xs text-midGrey font-bold">
-                        {showMusicHistory ? "Hide" : "View"}
-                     </button>
-                 </div>
+            <View className="bg-white border border-secondary rounded-xl p-4 mb-6">
+                 <TouchableOpacity 
+                    className="flex-row justify-between items-center" 
+                    onPress={() => setShowMusicHistory(!showMusicHistory)}
+                 >
+                     <View className="flex-row items-center gap-2">
+                         <Music size={18} color="#1DB954" />
+                         <Text className="font-bold text-sm text-dark">Music Logs</Text>
+                     </View>
+                     <Text className="text-xs text-midGrey font-bold">{showMusicHistory ? "Hide" : "View"}</Text>
+                 </TouchableOpacity>
                  
                  {showMusicHistory && (
-                     <div className="mt-3 animate-fade-in">
+                     <View className="mt-3">
                          {(!userProfile.musicHistory || userProfile.musicHistory.length === 0) ? (
-                             <p className="text-xs text-midGrey italic">No music logged yet. Connect Spotify while cooking!</p>
+                             <Text className="text-xs text-midGrey italic">No music logged yet. Connect Spotify while cooking!</Text>
                          ) : (
                              <>
-                                <div className="max-h-40 overflow-y-auto space-y-2 mb-3">
+                                <View className="mb-3">
                                     {userProfile.musicHistory.slice().reverse().map((track, idx) => (
-                                        <div key={idx} className="flex items-center gap-3 bg-secondary/30 p-2 rounded-lg">
-                                            {track.albumArt ? <img src={track.albumArt} className="w-8 h-8 rounded" alt="" /> : <div className="w-8 h-8 bg-gray-200 rounded"/>}
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-xs font-bold truncate">{track.name}</p>
-                                                <p className="text-[10px] text-midGrey truncate">{track.artist}</p>
-                                            </div>
-                                            <span className="text-[8px] text-gray-400">{new Date(track.playedAt).toLocaleDateString()}</span>
-                                        </div>
+                                        <View key={idx} className="flex-row items-center gap-3 bg-secondary/30 p-2 rounded-lg mb-1">
+                                            {track.albumArt ? <Image source={{ uri: track.albumArt }} className="w-8 h-8 rounded" /> : <View className="w-8 h-8 bg-gray-200 rounded"/>}
+                                            <View className="flex-1">
+                                                <Text className="text-xs font-bold text-dark" numberOfLines={1}>{track.name}</Text>
+                                                <Text className="text-[10px] text-midGrey" numberOfLines={1}>{track.artist}</Text>
+                                            </View>
+                                            <Text className="text-[8px] text-gray-400">{new Date(track.playedAt).toLocaleDateString()}</Text>
+                                        </View>
                                     ))}
-                                </div>
-                                <button onClick={handleShareMusic} className="w-full py-2 bg-[#1DB954]/10 text-[#1DB954] rounded-lg text-xs font-bold flex items-center justify-center gap-2">
-                                    <Share2 size={12} /> Share Logs
-                                </button>
+                                </View>
+                                <TouchableOpacity onPress={handleShareMusic} className="w-full py-2 bg-green-50 rounded-lg flex-row items-center justify-center gap-2">
+                                    <Share2 size={12} color="#1DB954" />
+                                    <Text className="text-[#1DB954] text-xs font-bold">Share Logs</Text>
+                                </TouchableOpacity>
                              </>
                          )}
-                     </div>
+                     </View>
                  )}
-            </div>
+            </View>
 
             {/* Dietary Settings */}
-            <div className="bg-white border border-secondary rounded-xl p-4 mb-6">
-                <div className="flex justify-between items-center mb-4">
-                     <h3 className="font-bold text-sm">Dietary & Allergies</h3>
-                     <button onClick={() => editMode ? handleSaveProfile() : setEditMode(true)} className="text-xs text-gold font-bold">
-                        {editMode ? "Save" : "Edit"}
-                     </button>
-                </div>
+            <View className="bg-white border border-secondary rounded-xl p-4 mb-6">
+                <View className="flex-row justify-between items-center mb-4">
+                     <Text className="font-bold text-sm text-dark">Dietary & Allergies</Text>
+                     <TouchableOpacity onPress={() => editMode ? handleSaveProfile() : setEditMode(true)}>
+                        <Text className="text-xs text-gold font-bold">{editMode ? "Save" : "Edit"}</Text>
+                     </TouchableOpacity>
+                </View>
                 
                 {editMode ? (
-                    <div className="space-y-3">
-                        <div>
-                            <label className="text-xs text-midGrey">Dietary (comma separated)</label>
-                            <input className="w-full bg-secondary p-2 rounded text-sm" value={dietary} onChange={e => setDietary(e.target.value)} placeholder="e.g. Vegan, Keto" />
-                        </div>
-                        <div>
-                            <label className="text-xs text-midGrey">Allergies (comma separated)</label>
-                            <input className="w-full bg-secondary p-2 rounded text-sm" value={allergies} onChange={e => setAllergies(e.target.value)} placeholder="e.g. Peanuts, Gluten" />
-                        </div>
-                    </div>
+                    <View className="gap-3">
+                        <View>
+                            <Text className="text-xs text-midGrey mb-1">Dietary (comma separated)</Text>
+                            <TextInput 
+                                className="w-full bg-secondary p-2 rounded text-sm text-dark" 
+                                value={dietary} 
+                                onChangeText={setDietary} 
+                                placeholder="e.g. Vegan, Keto" 
+                            />
+                        </View>
+                        <View>
+                            <Text className="text-xs text-midGrey mb-1">Allergies (comma separated)</Text>
+                            <TextInput 
+                                className="w-full bg-secondary p-2 rounded text-sm text-dark" 
+                                value={allergies} 
+                                onChangeText={setAllergies} 
+                                placeholder="e.g. Peanuts, Gluten" 
+                            />
+                        </View>
+                    </View>
                 ) : (
-                    <div className="space-y-2">
-                        <div className="flex flex-wrap gap-2">
-                            {userProfile.dietaryPreferences.length === 0 && <span className="text-xs text-midGrey">No preferences set</span>}
-                            {userProfile.dietaryPreferences.map(p => <span key={p} className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">{p}</span>)}
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                             {userProfile.allergies.length === 0 && <span className="text-xs text-midGrey">No allergies set</span>}
-                             {userProfile.allergies.map(p => <span key={p} className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded">No {p}</span>)}
-                        </div>
-                    </div>
+                    <View className="gap-2">
+                        <View className="flex-row flex-wrap gap-2">
+                            {userProfile.dietaryPreferences.length === 0 && <Text className="text-xs text-midGrey">No preferences set</Text>}
+                            {userProfile.dietaryPreferences.map(p => <Text key={p} className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded overflow-hidden">{p}</Text>)}
+                        </View>
+                        <View className="flex-row flex-wrap gap-2">
+                             {userProfile.allergies.length === 0 && <Text className="text-xs text-midGrey">No allergies set</Text>}
+                             {userProfile.allergies.map(p => <Text key={p} className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded overflow-hidden">No {p}</Text>)}
+                        </View>
+                    </View>
                 )}
-            </div>
+            </View>
 
             {!userProfile.isPremium && (
-                <div 
-                    onClick={() => setShowPaywall(true)}
-                    className="bg-gradient-to-r from-gold to-[#E5C265] p-6 rounded-2xl mb-8 text-white shadow-lg cursor-pointer transform transition-transform hover:scale-[1.02]"
+                <TouchableOpacity 
+                    onPress={() => setShowPaywall(true)}
+                    className="bg-gold p-6 rounded-2xl mb-8 shadow-lg"
                 >
-                    <div className="flex justify-between items-start mb-2">
-                        <h3 className="font-bold text-lg">Upgrade to Pro</h3>
-                        <Crown className="w-6 h-6" />
-                    </div>
-                    <p className="text-sm opacity-90 mb-4">Unlimited recipes, offline access, and zero ads.</p>
-                    <button className="bg-white text-gold font-bold text-xs px-4 py-2 rounded-lg">View Plans</button>
-                </div>
+                    <View className="flex-row justify-between items-start mb-2">
+                        <Text className="font-bold text-lg text-white">Upgrade to Pro</Text>
+                        <Crown size={24} color="white" />
+                    </View>
+                    <Text className="text-sm text-white/90 mb-4">Unlimited recipes, offline access, and zero ads.</Text>
+                    <View className="bg-white self-start px-4 py-2 rounded-lg">
+                        <Text className="text-gold font-bold text-xs">View Plans</Text>
+                    </View>
+                </TouchableOpacity>
             )}
 
-            <button 
-                onClick={onLogout}
-                className="w-full p-4 bg-white border border-secondary rounded-xl flex items-center justify-between text-red-500"
+            <TouchableOpacity 
+                onPress={onLogout}
+                className="w-full p-4 bg-white border border-secondary rounded-xl flex-row items-center justify-between mb-20"
             >
-                <span className="flex items-center gap-3"><LogOut size={18} /> Sign Out</span>
-            </button>
+                <View className="flex-row items-center gap-3">
+                    <LogOut size={18} color="#EF4444" />
+                    <Text className="text-red-500 font-bold">Sign Out</Text>
+                </View>
+                <ChevronRight size={16} color="#EF4444" />
+            </TouchableOpacity>
 
-            {showPaywall && <Paywall onClose={() => setShowPaywall(false)} onSuccess={() => { setPremium(true); setShowPaywall(false); }} />}
-        </div>
+            <Paywall visible={showPaywall} onClose={() => setShowPaywall(false)} onSuccess={() => { setPremium(true); setShowPaywall(false); }} />
+        </ScrollView>
     );
 };
 

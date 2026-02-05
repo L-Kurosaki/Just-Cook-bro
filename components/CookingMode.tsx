@@ -1,19 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Play, Pause, SkipForward, ArrowLeft, MessageCircle, AlertCircle, Music, Flame, Utensils, AlertTriangle, ListMusic, Plus, Share2, Check } from 'lucide-react';
+import { View, Text, TouchableOpacity, ScrollView, Alert, Linking, Image } from 'react-native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { Play, Pause, SkipForward, ArrowLeft, MessageCircle, AlertCircle, Music, Flame, Utensils, AlertTriangle, ListMusic, Plus, Share2, Check } from 'lucide-react-native';
 import { Recipe, SpotifyTrack } from '../types';
 import { getCookingHelp } from '../services/geminiService';
 import { spotifyService } from '../services/spotifyService';
+import { Audio } from 'expo-av';
 
 interface CookingModeProps {
   recipes: Recipe[];
   onAddMusicToHistory: (track: SpotifyTrack) => void;
-  onShareToFeed: (recipe: Recipe, track?: SpotifyTrack) => void; // New prop
+  onShareToFeed: (recipe: Recipe, track?: SpotifyTrack) => void;
 }
 
 const CookingMode: React.FC<CookingModeProps> = ({ recipes, onAddMusicToHistory, onShareToFeed }) => {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const route = useRoute<any>();
+  const navigation = useNavigation<any>();
+  const { id } = route.params;
   const recipe = recipes.find(r => r.id === id);
 
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
@@ -24,53 +27,37 @@ const CookingMode: React.FC<CookingModeProps> = ({ recipes, onAddMusicToHistory,
   const [isLoadingHelp, setIsLoadingHelp] = useState(false);
   const [timerAlert, setTimerAlert] = useState(false);
   
-  // Spotify State
-  const [spotifyToken, setSpotifyToken] = useState<string | null>(localStorage.getItem('jcb_spotify_token'));
+  const [spotifyToken, setSpotifyToken] = useState<string | null>(null);
   const [currentTrack, setCurrentTrack] = useState<SpotifyTrack | null>(null);
-  const [sessionQueue, setSessionQueue] = useState<SpotifyTrack[]>([]);
-  const [showQueue, setShowQueue] = useState(false);
-  
-  // Sharing State
   const [isShared, setIsShared] = useState(false);
 
   const currentStep = recipe?.steps[currentStepIndex];
 
-  // Spotify Auth Effect
+  // Spotify Auth Listener
   useEffect(() => {
-    const token = spotifyService.getTokenFromUrl();
-    if (token) {
-        setSpotifyToken(token);
-        localStorage.setItem('jcb_spotify_token', token);
-        window.location.hash = ""; 
-    }
+    const handleUrl = (event: { url: string }) => {
+        const token = spotifyService.extractTokenFromUrl(event.url);
+        if (token) setSpotifyToken(token);
+    };
+    const sub = Linking.addEventListener('url', handleUrl);
+    return () => sub.remove();
   }, []);
 
-  // Poll Spotify API
+  // Poll Spotify
   useEffect(() => {
     if (!spotifyToken) return;
-
     const checkMusic = async () => {
         const track = await spotifyService.getCurrentlyPlaying(spotifyToken);
-        if (track) {
-            setCurrentTrack(prev => {
-                if (prev?.name !== track.name) {
-                    setSessionQueue(q => {
-                         if (q.length > 0 && q[q.length -1].name === track.name) return q;
-                         return [...q, track];
-                    });
-                    onAddMusicToHistory(track);
-                    return track;
-                }
-                return prev;
-            });
+        if (track && track.name !== currentTrack?.name) {
+            setCurrentTrack(track);
+            onAddMusicToHistory(track);
         }
     };
-
-    checkMusic(); 
     const interval = setInterval(checkMusic, 20000);
     return () => clearInterval(interval);
-  }, [spotifyToken, onAddMusicToHistory]);
+  }, [spotifyToken, currentTrack]);
 
+  // Timer Logic
   useEffect(() => {
     if (currentStep?.timeInSeconds) {
       setTimeLeft(currentStep.timeInSeconds);
@@ -82,19 +69,28 @@ const CookingMode: React.FC<CookingModeProps> = ({ recipes, onAddMusicToHistory,
   }, [currentStepIndex, currentStep]);
 
   useEffect(() => {
-    let interval: number;
+    let interval: ReturnType<typeof setInterval>;
     if (isTimerRunning && timeLeft !== null && timeLeft > 0) {
-      interval = window.setInterval(() => {
+      interval = setInterval(() => {
         setTimeLeft((prev) => (prev !== null ? prev - 1 : 0));
       }, 1000);
     } else if (timeLeft === 0 && isTimerRunning) {
       setIsTimerRunning(false);
       setTimerAlert(true);
-      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'); 
-      audio.play().catch(e => console.log("Audio autoplay blocked"));
+      playSound();
     }
     return () => clearInterval(interval);
   }, [isTimerRunning, timeLeft]);
+
+  const playSound = async () => {
+      try {
+          const { sound } = await Audio.Sound.createAsync(
+             // Placeholder sound URL
+             { uri: 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3' }
+          );
+          await sound.playAsync();
+      } catch(e) { console.log('Audio error', e); }
+  };
 
   const handleNextStep = () => {
     if (!recipe) return;
@@ -103,13 +99,6 @@ const CookingMode: React.FC<CookingModeProps> = ({ recipes, onAddMusicToHistory,
       setShowHelp(false);
       setHelpMessage("");
     }
-  };
-  
-  const handleShare = () => {
-      if(!recipe) return;
-      onShareToFeed(recipe, currentTrack || undefined);
-      setIsShared(true);
-      alert("Shared to community feed with your vibe!");
   };
 
   const handleAskHelp = async () => {
@@ -126,19 +115,7 @@ const CookingMode: React.FC<CookingModeProps> = ({ recipes, onAddMusicToHistory,
     }
   };
 
-  const handleConnectSpotify = () => {
-      window.location.href = spotifyService.getAuthUrl();
-  };
-
-  const getActionIcon = (verb?: string) => {
-    if (!verb) return <Utensils className="w-12 h-12 text-gold animate-bounce" />;
-    const v = verb.toLowerCase();
-    if (v.includes('boil') || v.includes('fry') || v.includes('cook')) return <Flame className="w-16 h-16 text-orange-500 animate-pulse" />;
-    if (v.includes('chop') || v.includes('slice')) return <Utensils className="w-16 h-16 text-midGrey rotate-45" />;
-    return <Utensils className="w-12 h-12 text-gold" />;
-  };
-
-  if (!recipe || !currentStep) return <div className="p-6">Recipe not found</div>;
+  if (!recipe || !currentStep) return <View><Text>Recipe not found</Text></View>;
 
   const progress = ((currentStepIndex + 1) / recipe.steps.length) * 100;
   const isFinished = currentStepIndex === recipe.steps.length - 1;
@@ -150,196 +127,146 @@ const CookingMode: React.FC<CookingModeProps> = ({ recipes, onAddMusicToHistory,
   };
 
   return (
-    <div className={`flex flex-col h-screen transition-colors duration-500 ${timerAlert ? 'bg-red-50' : 'bg-primary'}`}>
-      {/* Top Bar */}
-      <div className="flex items-center justify-between p-4 border-b border-secondary">
-        <button onClick={() => navigate(-1)} className="p-2 text-dark">
-          <ArrowLeft className="w-6 h-6" />
-        </button>
-        <div className="flex-1 mx-4">
-          <div className="h-2 bg-secondary rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-gold transition-all duration-500 ease-out"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-          <p className="text-xs text-center mt-1 text-midGrey">Step {currentStepIndex + 1} of {recipe.steps.length}</p>
-        </div>
-        <button onClick={() => setShowQueue(!showQueue)} className={`p-2 rounded-full ${sessionQueue.length > 0 ? 'text-[#1DB954] bg-[#1DB954]/10' : 'text-midGrey'}`}>
-            <ListMusic className="w-5 h-5" />
-        </button>
-      </div>
+    <View className={`flex-1 ${timerAlert ? 'bg-red-50' : 'bg-white'}`}>
+      <View className="flex-row items-center justify-between p-4 border-b border-gray-100 mt-10">
+        <TouchableOpacity onPress={() => navigation.goBack()} className="p-2">
+          <ArrowLeft size={24} color="#2E2E2E" />
+        </TouchableOpacity>
+        <View className="flex-1 mx-4">
+          <View className="h-2 bg-gray-200 rounded-full overflow-hidden">
+            <View className="h-full bg-gold" style={{ width: `${progress}%` }} />
+          </View>
+          <Text className="text-xs text-center mt-1 text-midGrey">Step {currentStepIndex + 1} of {recipe.steps.length}</Text>
+        </View>
+        <TouchableOpacity>
+            <ListMusic size={24} color="#6B6B6B" />
+        </TouchableOpacity>
+      </View>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col p-6 overflow-y-auto">
+      <ScrollView className="flex-1 p-6" contentContainerStyle={{ paddingBottom: 100 }}>
         
-        {/* Real Spotify Integration */}
+        {/* Spotify */}
         {!spotifyToken ? (
-            <div 
-                onClick={handleConnectSpotify}
-                className="bg-black text-white p-3 rounded-xl flex items-center justify-between mb-6 cursor-pointer active:scale-95 transition-transform shadow-md"
+            <TouchableOpacity 
+                onPress={() => Linking.openURL(spotifyService.getAuthUrl())}
+                className="bg-black p-4 rounded-xl flex-row items-center justify-between mb-6"
             >
-                <div className="flex items-center gap-3">
-                    <Music className="w-5 h-5 text-[#1DB954]" />
-                    <div>
-                        <p className="text-xs font-bold">Connect Spotify</p>
-                        <p className="text-[10px] text-gray-400">Log your cooking jams</p>
-                    </div>
-                </div>
-                <Plus className="w-4 h-4 text-gray-400" />
-            </div>
+                <View className="flex-row items-center gap-3">
+                    <Music size={20} color="#1DB954" />
+                    <View>
+                        <Text className="text-xs font-bold text-white">Connect Spotify</Text>
+                        <Text className="text-[10px] text-gray-400">Log your cooking jams</Text>
+                    </View>
+                </View>
+                <Plus size={16} color="gray" />
+            </TouchableOpacity>
         ) : (
-             currentTrack ? (
-                <div className="bg-[#1DB954]/5 border border-[#1DB954]/20 p-3 rounded-xl mb-6 animate-fade-in relative">
-                    <div className="flex items-center gap-3">
-                        {currentTrack.albumArt ? (
-                            <img src={currentTrack.albumArt} alt="Album Art" className="w-10 h-10 rounded-md shadow-sm animate-spin-slow" />
-                        ) : (
-                            <div className="w-10 h-10 bg-[#1DB954] rounded-md flex items-center justify-center text-white"><Music size={20} /></div>
-                        )}
-                        <div className="flex-1 overflow-hidden">
-                            <p className="text-[10px] uppercase font-bold text-[#1DB954] mb-0.5 flex items-center gap-1">
-                                Now Playing
-                            </p>
-                            <p className="text-sm font-bold text-dark truncate">{currentTrack.name}</p>
-                            <p className="text-xs text-midGrey truncate">{currentTrack.artist}</p>
-                        </div>
-                    </div>
-                </div>
-             ) : (
-                <div className="bg-secondary p-3 rounded-xl mb-6 flex items-center gap-3 opacity-50">
-                    <Music className="w-5 h-5 text-midGrey" />
-                    <p className="text-xs text-midGrey">Play music on Spotify to see it here...</p>
-                </div>
+             currentTrack && (
+                <View className="bg-[#1DB954]/5 border border-[#1DB954]/20 p-3 rounded-xl mb-6 flex-row items-center gap-3">
+                    {currentTrack.albumArt ? (
+                        <Image source={{ uri: currentTrack.albumArt }} className="w-10 h-10 rounded-md" />
+                    ) : <View className="w-10 h-10 bg-[#1DB954] rounded-md" />}
+                    <View className="flex-1">
+                        <Text className="text-[10px] uppercase font-bold text-[#1DB954] mb-0.5">Now Playing</Text>
+                        <Text className="text-sm font-bold text-dark" numberOfLines={1}>{currentTrack.name}</Text>
+                        <Text className="text-xs text-midGrey" numberOfLines={1}>{currentTrack.artist}</Text>
+                    </View>
+                </View>
              )
         )}
 
-        {/* Queue / Session History Overlay */}
-        {showQueue && (
-             <div className="bg-white border border-secondary p-4 rounded-xl mb-6 shadow-sm animate-fade-in">
-                 <h4 className="font-bold text-sm mb-3 flex items-center gap-2"><ListMusic size={14} /> Session History</h4>
-                 {sessionQueue.length === 0 ? (
-                     <p className="text-xs text-midGrey">No songs logged yet.</p>
-                 ) : (
-                     <div className="space-y-2 max-h-32 overflow-y-auto">
-                         {sessionQueue.map((track, idx) => (
-                             <div key={idx} className="flex items-center justify-between text-xs">
-                                 <span className="truncate flex-1 font-medium">{track.name}</span>
-                                 <span className="text-midGrey ml-2 text-[10px]">{new Date(track.playedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                             </div>
-                         ))}
-                     </div>
-                 )}
-             </div>
+        <View className="items-center mb-8">
+            <View className="w-24 h-24 bg-secondary rounded-full items-center justify-center mb-4">
+                 <Utensils size={40} color="#C9A24D" />
+            </View>
+            <Text className="text-2xl font-bold text-dark text-center leading-tight">{currentStep.instruction}</Text>
+        </View>
+
+        {currentStep.warning && (
+          <View className="bg-red-50 p-4 rounded-lg flex-row items-center gap-2 mb-6">
+             <AlertTriangle size={20} color="#DC2626" />
+             <Text className="text-xs font-bold uppercase text-red-600">{currentStep.warning}</Text>
+          </View>
         )}
 
-        {/* Animation & Action */}
-        <div className="flex justify-center mb-6">
-            <div className="w-24 h-24 bg-secondary rounded-full flex items-center justify-center shadow-inner">
-                {getActionIcon(currentStep.actionVerb)}
-            </div>
-        </div>
+        {currentStep.tip && (
+        <View className="bg-blue-50 border border-blue-100 p-4 rounded-xl mb-6 flex-row gap-3">
+            <Text className="text-xl">💡</Text>
+            <View className="flex-1">
+                <Text className="font-bold text-blue-900 text-[10px] uppercase mb-1">Chef's Tip</Text>
+                <Text className="text-sm text-blue-800 italic">"{currentStep.tip}"</Text>
+            </View>
+        </View>
+        )}
 
-        {/* Instruction */}
-        <div className="flex-1 flex flex-col items-center text-center">
-            <h2 className="text-2xl font-bold text-dark mb-4 leading-tight animate-fade-in-up">
-            {currentStep.instruction}
-            </h2>
-
-            {currentStep.warning && (
-              <div className="bg-red-50 text-red-600 px-4 py-2 rounded-lg flex items-center gap-2 mb-4 animate-pulse">
-                 <AlertTriangle size={16} />
-                 <span className="text-xs font-bold uppercase">{currentStep.warning}</span>
-              </div>
-            )}
-
-            {currentStep.tip && (
-            <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl mb-6 flex gap-3 text-left w-full">
-                <span className="text-xl">💡</span>
-                <div>
-                    <h4 className="font-bold text-blue-900 text-[10px] uppercase mb-1">Chef's Tip</h4>
-                    <p className="text-sm text-blue-800 italic">"{currentStep.tip}"</p>
-                </div>
-            </div>
-            )}
-        </div>
-
-        {/* Timer */}
         {timeLeft !== null && (
-          <div className={`rounded-2xl p-6 flex flex-col items-center justify-center mb-6 border transition-colors ${timerAlert ? 'bg-red-100 border-red-500' : 'bg-secondary border-gray-200'}`}>
-            <div className={`text-6xl font-mono font-bold mb-6 tracking-wider ${timerAlert ? 'text-red-600' : 'text-dark'}`}>
+          <View className={`rounded-2xl p-6 items-center justify-center mb-6 border ${timerAlert ? 'bg-red-100 border-red-500' : 'bg-secondary border-gray-200'}`}>
+            <Text className={`text-6xl font-bold mb-6 ${timerAlert ? 'text-red-600' : 'text-dark'}`}>
               {formatTime(timeLeft)}
-            </div>
-            <div className="flex gap-4">
-              <button 
-                onClick={() => { setIsTimerRunning(!isTimerRunning); setTimerAlert(false); }}
-                className="w-16 h-16 rounded-full bg-gold flex items-center justify-center text-white shadow-lg active:scale-95 transition-transform"
-              >
-                {isTimerRunning ? <Pause className="w-8 h-8" /> : <Play className="w-8 h-8 ml-1" />}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Help Section */}
-        {showHelp && (
-           <div className="bg-dark text-primary p-5 rounded-xl mb-6 animate-fade-in border-l-4 border-gold">
-             <div className="flex items-start gap-3">
-               <MessageCircle className="w-5 h-5 text-gold shrink-0 mt-1" />
-               <div className="flex-1">
-                 <h4 className="font-bold text-gold text-xs uppercase mb-1">AI Assistant</h4>
-                 <p className="text-sm leading-relaxed">{isLoadingHelp ? "Thinking..." : helpMessage}</p>
-               </div>
-             </div>
-           </div>
-        )}
-
-      </div>
-
-      {/* Sticky Bottom Actions */}
-      <div className="p-6 border-t border-secondary bg-primary">
-         <div className="flex gap-4 mb-4">
-            <button 
-              onClick={handleAskHelp}
-              className="flex-1 bg-secondary text-dark py-4 rounded-xl font-medium text-sm flex items-center justify-center gap-2 border border-secondary hover:bg-gray-200 transition-colors"
+            </Text>
+            <TouchableOpacity 
+                onPress={() => { setIsTimerRunning(!isTimerRunning); setTimerAlert(false); }}
+                className="w-16 h-16 rounded-full bg-gold items-center justify-center shadow-lg"
             >
-              <AlertCircle className="w-4 h-4" />
-              Help?
-            </button>
-         </div>
+                {isTimerRunning ? <Pause size={32} color="white" /> : <Play size={32} color="white" style={{ marginLeft: 4 }} />}
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {showHelp && (
+           <View className="bg-dark p-5 rounded-xl mb-6 border-l-4 border-gold">
+             <View className="flex-row items-start gap-3">
+               <MessageCircle size={20} color="#C9A24D" />
+               <View className="flex-1">
+                 <Text className="font-bold text-gold text-xs uppercase mb-1">AI Assistant</Text>
+                 <Text className="text-white text-sm leading-relaxed">{isLoadingHelp ? "Thinking..." : helpMessage}</Text>
+               </View>
+             </View>
+           </View>
+        )}
+
+      </ScrollView>
+
+      <View className="p-6 border-t border-secondary bg-white">
+         <View className="flex-row gap-4 mb-4">
+            <TouchableOpacity 
+              onPress={handleAskHelp}
+              className="flex-1 bg-secondary py-4 rounded-xl flex-row items-center justify-center gap-2"
+            >
+              <AlertCircle size={16} color="#2E2E2E" />
+              <Text className="text-dark font-bold text-sm">Help?</Text>
+            </TouchableOpacity>
+         </View>
          
          {!isFinished ? (
-            <button 
-              onClick={handleNextStep}
-              className="w-full bg-gold text-white text-lg font-bold py-4 rounded-xl shadow-lg active:bg-[#B89240] transition-colors flex items-center justify-center gap-2"
+            <TouchableOpacity 
+              onPress={handleNextStep}
+              className="w-full bg-gold py-4 rounded-xl shadow-lg flex-row items-center justify-center gap-2"
             >
-              Next Step <SkipForward className="w-5 h-5" />
-            </button>
+              <Text className="text-white text-lg font-bold">Next Step</Text>
+              <SkipForward size={20} color="white" />
+            </TouchableOpacity>
          ) : (
-            <div className="flex flex-col gap-3">
-                {!isShared ? (
-                    <button 
-                      onClick={handleShare}
-                      className="w-full bg-black text-white text-lg font-bold py-4 rounded-xl shadow-lg flex items-center justify-center gap-2"
-                    >
-                       <Share2 className="w-5 h-5" /> Share to Feed
-                    </button>
-                ) : (
-                    <button className="w-full bg-green-500 text-white text-lg font-bold py-4 rounded-xl shadow-lg flex items-center justify-center gap-2 cursor-default">
-                        <Check className="w-5 h-5" /> Shared!
-                    </button>
-                )}
-                
-                <button 
-                   onClick={() => navigate('/')}
-                   className="w-full bg-secondary text-dark text-lg font-bold py-4 rounded-xl shadow-sm flex items-center justify-center gap-2"
+            <View className="gap-3">
+                <TouchableOpacity 
+                  onPress={() => { onShareToFeed(recipe, currentTrack || undefined); setIsShared(true); }}
+                  disabled={isShared}
+                  className={`w-full py-4 rounded-xl shadow-lg flex-row items-center justify-center gap-2 ${isShared ? 'bg-green-500' : 'bg-black'}`}
                 >
-                    Done Cooking
-                </button>
-            </div>
+                   {isShared ? <Check size={20} color="white" /> : <Share2 size={20} color="white" />}
+                   <Text className="text-white text-lg font-bold">{isShared ? 'Shared!' : 'Share to Feed'}</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                   onPress={() => navigation.navigate('Home')}
+                   className="w-full bg-secondary py-4 rounded-xl items-center justify-center"
+                >
+                    <Text className="text-dark text-lg font-bold">Done Cooking</Text>
+                </TouchableOpacity>
+            </View>
          )}
-      </div>
-    </div>
+      </View>
+    </View>
   );
 };
 

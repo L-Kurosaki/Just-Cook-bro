@@ -1,8 +1,9 @@
 import { SubscriptionPackage } from "../types";
 
-// NOTE: Since this is a WEB application, we cannot use 'react-native-purchases'.
-// This service mimics the exact structure of the RevenueCat SDK so your code logic remains valid.
-// In a real React Native app, you would replace this simulation with actual SDK calls.
+// NOTE: This service simulates RevenueCat for demonstration purposes.
+// In a production React Native app, replace this with 'react-native-purchases'.
+//
+// import Purchases from 'react-native-purchases';
 
 const ENTITLEMENT_ID = "Just Cook Bro Pro";
 const API_KEY = "test_dwHcXCrwnKHRBVZddIqsHzYIEgh";
@@ -12,13 +13,12 @@ class RevenueCatService {
 
   async configure(apiKey: string) {
     console.log(`[RevenueCat] Configured with API Key: ${apiKey}`);
-    // Check local storage to persist state in this web simulation
-    const savedStatus = localStorage.getItem("jcb_premium_status");
-    this.isPremium = savedStatus === "true";
+    // Simulating checking entitlement state
+    this.isPremium = false; 
   }
 
   async getOfferings(): Promise<SubscriptionPackage[]> {
-    // These match the products you configured in RevenueCat
+    // These match the products configured in RevenueCat/App Store/Play Store
     return [
       {
         identifier: "monthly",
@@ -64,7 +64,6 @@ class RevenueCatService {
     
     // Simulate successful purchase logic
     this.isPremium = true;
-    localStorage.setItem("jcb_premium_status", "true");
     
     console.log("[RevenueCat] Purchase successful. Entitlement granted.");
     return true;
@@ -73,8 +72,8 @@ class RevenueCatService {
   async restorePurchases(): Promise<boolean> {
     console.log("[RevenueCat] Restoring purchases...");
     await new Promise((resolve) => setTimeout(resolve, 1000));
-    const savedStatus = localStorage.getItem("jcb_premium_status");
-    this.isPremium = savedStatus === "true";
+    // Simulate restore
+    this.isPremium = true;
     return this.isPremium;
   }
 }

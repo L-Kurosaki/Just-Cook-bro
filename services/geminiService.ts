@@ -4,6 +4,14 @@ import { Recipe, Step, StoreLocation } from "../types";
 // Initialize Gemini Client
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
+// React Native doesn't support crypto.randomUUID out of the box without polyfills.
+const generateId = () => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
 // Helper to format dietary context for prompts
 const formatDietaryContext = (allergies: string[] = [], diets: string[] = []) => {
   if (allergies.length === 0 && diets.length === 0) return "";
@@ -95,7 +103,7 @@ export const parseRecipeFromText = async (text: string, allergies: string[] = []
   
   return {
     ...rawRecipe,
-    id: crypto.randomUUID(),
+    id: generateId(),
     imageUrl: "https://picsum.photos/800/600", 
     isPremium: false,
     author: "You",
@@ -179,7 +187,7 @@ export const extractRecipeFromUrl = async (url: string, allergies: string[] = []
 
     return {
         ...rawRecipe,
-        id: crypto.randomUUID(),
+        id: generateId(),
         imageUrl: "https://picsum.photos/800/600",
         sourceUrl: url,
         isPremium: false,
@@ -299,7 +307,7 @@ export const generateFullRecipeFromSuggestion = async (suggestion: { title: stri
     
     return {
         ...rawRecipe,
-        id: crypto.randomUUID(),
+        id: generateId(),
         imageUrl: base64Image ? `data:image/jpeg;base64,${base64Image}` : "https://picsum.photos/800/600",
         isPremium: false,
         author: "AI Chef",
@@ -310,7 +318,7 @@ export const generateFullRecipeFromSuggestion = async (suggestion: { title: stri
 };
 
 /**
- * Video Analysis with Watermark detection for Attribution.
+ * Video Analysis with STRICT Watermark detection for Attribution.
  */
 export const generateRecipeFromVideoFrames = async (frames: string[], allergies: string[] = [], diets: string[] = []): Promise<Recipe> => {
   const model = "gemini-3-pro-preview"; 
@@ -318,12 +326,14 @@ export const generateRecipeFromVideoFrames = async (frames: string[], allergies:
   const dietaryPrompt = formatDietaryContext(allergies, diets);
 
   const prompt = `
-    Analyze these video frames.
+    Analyze these video frames for a cooking recipe.
     ${dietaryPrompt}
 
     TASKS:
     1. Extract the recipe steps and ingredients.
-    2. ATTRIBUTION CHECK: Look for watermarks, TikTok handles, YouTube channel names, or text overlays identifying the creator.
+    2. **STRICT ATTRIBUTION CHECK**: You MUST look for watermarks, TikTok handles, YouTube channel names, or on-screen text overlays that identify the creator. 
+       - Examples: "@GordonRamsay", "Tasty", "BingingWithBabish".
+       - This is CRITICAL for user safety and credit.
     3. If a name or handle is found, set "originalAuthor" and "socialHandle".
     4. If the platform is identifiable (e.g. TikTok logo), set "originalSource".
   `;
@@ -346,7 +356,7 @@ export const generateRecipeFromVideoFrames = async (frames: string[], allergies:
           prepTime: { type: Type.STRING },
           cookTime: { type: Type.STRING },
           servings: { type: Type.NUMBER },
-          originalAuthor: { type: Type.STRING, description: "Name extracted from watermark/text" },
+          originalAuthor: { type: Type.STRING, description: "Name extracted from watermark/text. Mandatory if visible." },
           socialHandle: { type: Type.STRING, description: "Handle extracted from watermark/text" },
           originalSource: { type: Type.STRING },
           ingredients: {
@@ -386,7 +396,7 @@ export const generateRecipeFromVideoFrames = async (frames: string[], allergies:
 
   return {
     ...rawRecipe,
-    id: crypto.randomUUID(),
+    id: generateId(),
     imageUrl: frames.length > 0 ? `data:image/jpeg;base64,${frames[Math.floor(frames.length / 2)]}` : "https://picsum.photos/800/600",
     isPremium: false,
     author: "Video AI",

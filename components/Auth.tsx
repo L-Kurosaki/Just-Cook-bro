@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { supabase } from '../services/supabaseClient';
-import { LogIn, UserPlus, Loader } from 'lucide-react';
+import { LogIn, UserPlus } from 'lucide-react-native';
+
+// Fix for "Cannot find name 'require'" error when @types/node is missing
+declare const require: any;
 
 interface AuthProps {
   onAuthSuccess: (user: any) => void;
@@ -13,25 +17,38 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAuth = async () => {
     setLoading(true);
     setError(null);
 
     try {
+      const auth = supabase.auth as any;
       let result;
+
       if (isLogin) {
-        result = await supabase.auth.signInWithPassword({ email, password });
+          // Attempt v2 method, fallback to v1 method
+          if (auth.signInWithPassword) {
+              result = await auth.signInWithPassword({ email, password });
+          } else {
+              result = await auth.signIn({ email, password });
+          }
       } else {
-        result = await supabase.auth.signUp({ email, password });
+          // Attempt sign up
+          result = await auth.signUp({ email, password });
       }
 
-      if (result.error) throw result.error;
+      const { data, error, user, session } = result || {};
 
-      if (result.data.user) {
-        onAuthSuccess(result.data.user);
-      } else if (!isLogin) {
-        setError("Check your email for the confirmation link!");
+      if (error) throw error;
+
+      // Handle both v2 structure (data.user) and v1 structure (user)
+      const resolvedUser = user || data?.user;
+      const resolvedSession = session || data?.session;
+
+      if (resolvedUser && resolvedSession) {
+        onAuthSuccess(resolvedUser);
+      } else if (!isLogin && resolvedUser && !resolvedSession) {
+        setError("Success! Please check your email to confirm.");
       }
     } catch (err: any) {
       setError(err.message || "Authentication failed");
@@ -41,78 +58,77 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-6 animate-fade-in bg-white">
-      {/* Logo & Tagline - ABOVE Sign In */}
-      <div className="flex flex-col items-center mb-10">
-        <div className="w-32 h-32 mb-4">
-            <img src="assets/logo.png" alt="Just Cook Bro" className="w-full h-full object-contain" />
-        </div>
-        <h1 className="text-3xl font-bold text-dark mb-2">Just Cook Bro</h1>
-        <p className="text-midGrey font-medium text-sm text-center">Recipes, organized. Cooking, simplified.</p>
-      </div>
+    <View className="flex-1 items-center justify-center bg-white p-6">
+      <View className="items-center mb-10">
+        <View className="w-32 h-32 mb-4">
+             {/* Ensure you have assets/logo.png in your Expo project or use a URI */}
+             <Image source={require('../assets/logo.png')} className="w-full h-full" resizeMode="contain" />
+        </View>
+        <Text className="text-3xl font-bold text-dark mb-2">Just Cook Bro</Text>
+        <Text className="text-midGrey font-medium text-sm text-center">Recipes, organized. Cooking, simplified.</Text>
+      </View>
 
-      <div className="bg-secondary/30 p-8 rounded-3xl w-full max-w-sm border border-secondary backdrop-blur-sm">
+      <View className="bg-secondary/30 p-8 rounded-3xl w-full max-w-sm border border-secondary">
         
-        {/* Toggle Buttons */}
-        <div className="flex bg-gray-200 p-1 rounded-xl mb-6 relative">
-             <div 
-                className={`absolute top-1 bottom-1 w-[calc(50%-4px)] bg-white rounded-lg shadow-sm transition-all duration-300 ${isLogin ? 'left-1' : 'left-[calc(50%+4px)]'}`}
-             />
-             <button 
-                onClick={() => { setIsLogin(true); setError(null); }} 
-                className={`flex-1 py-2 text-sm font-bold z-10 transition-colors ${isLogin ? 'text-dark' : 'text-midGrey'}`}
+        {/* Toggle */}
+        <View className="flex-row bg-gray-200 p-1 rounded-xl mb-6">
+             <TouchableOpacity 
+                onPress={() => { setIsLogin(true); setError(null); }} 
+                className={`flex-1 py-2 rounded-lg items-center ${isLogin ? 'bg-white shadow-sm' : ''}`}
              >
-                Sign In
-             </button>
-             <button 
-                onClick={() => { setIsLogin(false); setError(null); }} 
-                className={`flex-1 py-2 text-sm font-bold z-10 transition-colors ${!isLogin ? 'text-dark' : 'text-midGrey'}`}
+                <Text className={`text-sm font-bold ${isLogin ? 'text-dark' : 'text-midGrey'}`}>Sign In</Text>
+             </TouchableOpacity>
+             <TouchableOpacity 
+                onPress={() => { setIsLogin(false); setError(null); }} 
+                className={`flex-1 py-2 rounded-lg items-center ${!isLogin ? 'bg-white shadow-sm' : ''}`}
              >
-                Sign Up
-             </button>
-        </div>
+                <Text className={`text-sm font-bold ${!isLogin ? 'text-dark' : 'text-midGrey'}`}>Sign Up</Text>
+             </TouchableOpacity>
+        </View>
 
         {error && (
-          <div className="bg-red-50 text-red-500 text-xs p-3 rounded-lg mb-4 text-center">
-            {error}
-          </div>
+          <View className={`p-3 rounded-lg mb-4 ${error.includes('Success') ? 'bg-green-50' : 'bg-red-50'}`}>
+            <Text className={`text-xs text-center ${error.includes('Success') ? 'text-green-600' : 'text-red-500'}`}>{error}</Text>
+          </View>
         )}
 
-        <form onSubmit={handleAuth} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-dark mb-1 ml-1">Email Address</label>
-            <input 
-              type="email" 
-              required
-              className="w-full p-3 bg-white rounded-xl text-sm border border-transparent focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20 transition-all"
+        <View className="space-y-4">
+          <View>
+            <Text className="text-xs font-bold text-dark mb-1 ml-1">Email Address</Text>
+            <TextInput 
+              autoCapitalize="none"
+              className="w-full p-3 bg-white rounded-xl text-sm"
               placeholder="chef@example.com"
               value={email}
-              onChange={e => setEmail(e.target.value)}
+              onChangeText={setEmail}
             />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-dark mb-1 ml-1">Password</label>
-            <input 
-              type="password" 
-              required
-              className="w-full p-3 bg-white rounded-xl text-sm border border-transparent focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20 transition-all"
+          </View>
+          <View>
+            <Text className="text-xs font-bold text-dark mb-1 ml-1">Password</Text>
+            <TextInput 
+              secureTextEntry
+              className="w-full p-3 bg-white rounded-xl text-sm"
               placeholder="••••••••"
               value={password}
-              onChange={e => setPassword(e.target.value)}
+              onChangeText={setPassword}
             />
-          </div>
+          </View>
 
-          <button 
-            type="submit" 
+          <TouchableOpacity 
+            onPress={handleAuth}
             disabled={loading}
-            className="w-full bg-gold text-white font-bold py-4 rounded-xl shadow-lg hover:bg-[#B89240] active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-4"
+            className="w-full bg-gold py-4 rounded-xl shadow-lg flex-row items-center justify-center gap-2 mt-4"
           >
-            {loading ? <Loader className="animate-spin w-5 h-5" /> : (isLogin ? <LogIn className="w-5 h-5" /> : <UserPlus className="w-5 h-5" />)}
-            {isLogin ? 'Sign In' : 'Create Account'}
-          </button>
-        </form>
-      </div>
-    </div>
+            {loading ? <ActivityIndicator color="white" /> : (
+                <View className="flex-row items-center gap-2">
+                    {isLogin ? <LogIn size={20} color="white" /> : <UserPlus size={20} color="white" />}
+                    <Text className="text-white font-bold">{isLogin ? 'Sign In' : 'Create Account'}</Text>
+                </View>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
   );
 };
 

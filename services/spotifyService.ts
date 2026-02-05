@@ -1,7 +1,9 @@
-// Replace this with your actual Spotify Client ID from developer.spotify.com
-// For development, ensure 'http://localhost:5173/' (or your app URL) is added to Redirect URIs in dashboard
+import { Linking } from 'react-native';
+
+// Simple simulate/mock for demonstration as full OAuth requires native setup or deep linking
 const CLIENT_ID = 'YOUR_SPOTIFY_CLIENT_ID'; 
-const REDIRECT_URI = window.location.origin + '/'; 
+// In React Native, you typically use a deep link scheme like 'justcookbro://'
+const REDIRECT_URI = 'justcookbro://spotify-auth'; 
 const SCOPES = [
   'user-read-currently-playing',
   'user-read-playback-state'
@@ -9,16 +11,15 @@ const SCOPES = [
 
 export const spotifyService = {
   getAuthUrl: () => {
-    return `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPES.join(' '))}&response_type=token&show_dialog=true`;
+    return `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPES.join(' '))}&response_type=token`;
   },
 
-  getTokenFromUrl: (): string | null => {
-    const hash = window.location.hash;
-    if (!hash) return null;
-    
-    const params = new URLSearchParams(hash.substring(1));
-    const token = params.get('access_token');
-    return token;
+  // Note: on Mobile, you catch this via Linking.addEventListener('url', ...) in the component
+  extractTokenFromUrl: (url: string): string | null => {
+    if (!url) return null;
+    const regex = /access_token=([^&]*)/;
+    const match = url.match(regex);
+    return match ? match[1] : null;
   },
 
   getCurrentlyPlaying: async (token: string) => {

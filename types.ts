@@ -1,3 +1,15 @@
+import 'react-native';
+
+declare module 'react-native' {
+  interface ViewProps { className?: string; }
+  interface TextProps { className?: string; }
+  interface ImageProps { className?: string; }
+  interface TouchableOpacityProps { className?: string; }
+  interface ScrollViewProps { className?: string; }
+  interface TextInputProps { className?: string; }
+  interface ActivityIndicatorProps { className?: string; }
+}
+
 export interface Ingredient {
   name: string;
   amount: string;
@@ -109,4 +121,10 @@ export interface SubscriptionPackage {
   priceString: string;
   title: string;
   description: string;
+}
+
+export interface ShopItem {
+    id: string;
+    text: string;
+    done: boolean;
 }
