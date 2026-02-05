@@ -3,12 +3,32 @@ export interface Ingredient {
   amount: string;
   category?: string; // produce, spice, pantry
   owned?: boolean; // logic for "Checklist"
+  imageUrl?: string; // For grocery visual confirmation
 }
 
 export interface Step {
   instruction: string;
   timeInSeconds?: number;
   tip?: string; // Gemini generated tip
+  warning?: string; // "Don't burn it!"
+  actionVerb?: string; // chop, boil, fry
+}
+
+export interface Review {
+  id: string;
+  userId: string;
+  userName: string;
+  rating: number;
+  comment: string;
+  date: string;
+}
+
+export interface SpotifyTrack {
+  name: string;
+  artist: string;
+  albumArt?: string;
+  uri: string;
+  playedAt: string; // ISO string
 }
 
 export interface Recipe {
@@ -23,16 +43,27 @@ export interface Recipe {
   imageUrl?: string;
   sourceUrl?: string;
   tags?: string[];
-  musicMood?: string; // "Upbeat Jazz", "Lo-fi Beats"
+  musicMood?: string; // Legacy suggestion, can still keep for initial vibes
   rating?: number;
+  reviews?: Review[];
   isPremium?: boolean;
+  author?: string;
+  authorId?: string;
+  isOffline?: boolean;
+  isPublic?: boolean; // Community feature
+  dietaryTags?: string[]; // vegan, keto
+  allergens?: string[]; // peanuts, dairy
 }
 
 export interface UserProfile {
+  id?: string;
+  email?: string;
   name: string;
   dietaryPreferences: string[];
   allergies: string[];
   isPremium: boolean;
+  isDeleteLocked: boolean; // Enforces the Add -> Delete -> Add -> Delete cycle
+  musicHistory: SpotifyTrack[]; // Persistent log of songs listened to while cooking
 }
 
 export interface ChatMessage {
@@ -46,4 +77,11 @@ export interface StoreLocation {
   rating?: number;
   openNow?: boolean;
   uri?: string;
+}
+
+export interface SubscriptionPackage {
+  identifier: string;
+  priceString: string;
+  title: string;
+  description: string;
 }

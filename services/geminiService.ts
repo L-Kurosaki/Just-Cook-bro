@@ -10,9 +10,21 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 export const parseRecipeFromText = async (text: string): Promise<Recipe> => {
   const model = "gemini-3-flash-preview";
   
+  const prompt = `
+    You are an expert chef API. 
+    Input: "${text}"
+    
+    1. If the input is a URL, attempt to extract the recipe content structure from it.
+    2. If the input is text describing a video, structure it into steps.
+    3. Identify "actionVerb" for steps (e.g., 'chop', 'boil', 'fry', 'bake', 'mix').
+    4. Provide specific "warning" for steps where timing is critical (e.g., "Garlic burns fast!").
+    5. Identify potential allergens based on ingredients.
+    6. Suggest a 'musicMood'.
+  `;
+
   const response = await ai.models.generateContent({
     model,
-    contents: `Extract a structured recipe from the following text. If information is missing, infer reasonable defaults based on the context. Ensure the tone is simple and reassuring. Text: ${text}`,
+    contents: prompt,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -30,7 +42,7 @@ export const parseRecipeFromText = async (text: string): Promise<Recipe> => {
               properties: {
                 name: { type: Type.STRING },
                 amount: { type: Type.STRING },
-                category: { type: Type.STRING, description: "e.g., Produce, Meat, Spices" },
+                category: { type: Type.STRING },
               },
             },
           },
@@ -40,12 +52,16 @@ export const parseRecipeFromText = async (text: string): Promise<Recipe> => {
               type: Type.OBJECT,
               properties: {
                 instruction: { type: Type.STRING },
-                timeInSeconds: { type: Type.NUMBER, description: "Estimated time for this specific step in seconds, if applicable. 0 if not." },
-                tip: { type: Type.STRING, description: "A helpful, reassuring tip or light joke for this step." },
+                timeInSeconds: { type: Type.NUMBER },
+                tip: { type: Type.STRING },
+                warning: { type: Type.STRING },
+                actionVerb: { type: Type.STRING },
               },
             },
           },
-          musicMood: { type: Type.STRING, description: "Suggested music genre/mood for cooking this." },
+          musicMood: { type: Type.STRING },
+          dietaryTags: { type: Type.ARRAY, items: { type: Type.STRING } },
+          allergens: { type: Type.ARRAY, items: { type: Type.STRING } },
         },
         required: ["title", "ingredients", "steps"],
       },
@@ -57,99 +73,193 @@ export const parseRecipeFromText = async (text: string): Promise<Recipe> => {
   return {
     ...rawRecipe,
     id: crypto.randomUUID(),
-    imageUrl: "https://picsum.photos/800/600", // Placeholder
+    imageUrl: "https://picsum.photos/800/600", 
+    isPremium: false,
+    author: "You",
+    reviews: [],
+    isPublic: false,
+    isOffline: false
   };
 };
 
 /**
- * Scans a recipe from an image (Cookbook scan).
+ * Step 1 of Image Gen: Suggests 6 recipes based on the image + internet search.
+ */
+export const suggestRecipesFromImage = async (base64Image: string): Promise<Array<{ title: string, description: string }>> => {
+    const model = "gemini-3-flash-preview";
+    
+    const prompt = `
+      Analyze this image of food or ingredients. 
+      Identify the food items.
+      Search the internet to find 6 distinct, highly-rated, and accurate recipes that match this food.
+      Return a list of these 6 recipes with a title and a short appetizing description for each.
+    `;
+
+    const response = await ai.models.generateContent({
+        model,
+        contents: {
+            parts: [
+                { inlineData: { mimeType: "image/jpeg", data: base64Image } },
+                { text: prompt }
+            ]
+        },
+        config: {
+            tools: [{ googleSearch: {} }],
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.ARRAY,
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        title: { type: Type.STRING },
+                        description: { type: Type.STRING }
+                    },
+                    required: ["title", "description"]
+                }
+            }
+        }
+    });
+
+    try {
+        return JSON.parse(response.text || "[]");
+    } catch (e) {
+        console.error("Failed to parse suggestions", e);
+        return [];
+    }
+};
+
+/**
+ * Step 2 of Image Gen: Takes the selected suggestion and generates the full recipe.
+ */
+export const generateFullRecipeFromSuggestion = async (suggestion: { title: string, description: string }, base64Image?: string): Promise<Recipe> => {
+    const model = "gemini-3-flash-preview";
+    
+    const prompt = `
+      Create a detailed, step-by-step cooking recipe for "${suggestion.title}".
+      Description context: ${suggestion.description}.
+      
+      Requirements:
+      1. List precise ingredients with amounts.
+      2. Numbered step-by-step instructions.
+      3. Identify "actionVerb" for steps.
+      4. Provide tips and warnings.
+      5. Suggest a 'musicMood'.
+    `;
+
+    const response = await ai.models.generateContent({
+        model,
+        contents: prompt, // We don't strictly need the image again, the text context is usually enough now
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    title: { type: Type.STRING },
+                    description: { type: Type.STRING },
+                    prepTime: { type: Type.STRING },
+                    cookTime: { type: Type.STRING },
+                    servings: { type: Type.NUMBER },
+                    ingredients: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                name: { type: Type.STRING },
+                                amount: { type: Type.STRING },
+                                category: { type: Type.STRING },
+                            },
+                        },
+                    },
+                    steps: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                instruction: { type: Type.STRING },
+                                timeInSeconds: { type: Type.NUMBER },
+                                tip: { type: Type.STRING },
+                                warning: { type: Type.STRING },
+                                actionVerb: { type: Type.STRING },
+                            },
+                        },
+                    },
+                    musicMood: { type: Type.STRING },
+                    dietaryTags: { type: Type.ARRAY, items: { type: Type.STRING } },
+                    allergens: { type: Type.ARRAY, items: { type: Type.STRING } },
+                },
+                required: ["title", "ingredients", "steps"],
+            },
+        }
+    });
+
+    const rawRecipe = JSON.parse(response.text || "{}");
+    
+    return {
+        ...rawRecipe,
+        id: crypto.randomUUID(),
+        // We use the original image if available, else a placeholder
+        imageUrl: base64Image ? `data:image/jpeg;base64,${base64Image}` : "https://picsum.photos/800/600",
+        isPremium: false,
+        author: "AI Chef",
+        reviews: [],
+        isPublic: false,
+        isOffline: false
+    };
+};
+
+/**
+ * Legacy support / Direct scan if needed (consolidated for backward compatibility if called elsewhere)
  */
 export const scanRecipeFromImage = async (base64Image: string): Promise<Recipe> => {
-  const model = "gemini-2.5-flash-image"; // Optimized for image tasks
+   // This is a fallback that does both steps in one if called directly.
+   const suggestions = await suggestRecipesFromImage(base64Image);
+   if (suggestions.length > 0) {
+       return generateFullRecipeFromSuggestion(suggestions[0], base64Image);
+   }
+   throw new Error("Could not generate recipe");
+};
+
+/**
+ * OCR extraction for specific text blocks (ingredients or steps)
+ */
+export const extractTextFromImage = async (base64Image: string, type: 'ingredients' | 'steps'): Promise<string> => {
+  const model = "gemini-3-flash-preview";
+  const prompt = type === 'ingredients' 
+    ? "Look at this image. Extract only the food ingredients listed. Return them as a simple list, one per line. Do not include title or other text. If there are quantities, include them."
+    : "Look at this image. Extract the cooking instructions/steps. Return them as a numbered list. Do not include ingredients or title. Ignore UI elements.";
 
   const response = await ai.models.generateContent({
     model,
     contents: {
       parts: [
-        {
-          inlineData: {
-            mimeType: "image/jpeg",
-            data: base64Image,
-          },
-        },
-        {
-          text: "Analyze this image of a recipe. Extract the title, ingredients, and steps into a structured JSON format. Be precise with quantities.",
-        },
+        { inlineData: { mimeType: "image/jpeg", data: base64Image } },
+        { text: prompt },
       ],
     },
-    // Note: 2.5-flash-image does not support responseSchema effectively in all environments, 
-    // but we can request JSON in the prompt or use the generic structure if supported.
-    // For reliability in this demo, we will ask for markdown code block JSON and parse it manually if schema fails,
-    // but 3-flash-preview is better for schema. Let's try to prompt for JSON structure directly.
   });
-
-  // Simple parsing logic since 2.5-flash-image might return text with ```json block
-  const text = response.text || "";
-  const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/) || text.match(/\{[\s\S]*\}/);
-  
-  let rawRecipe: any = {};
-  if (jsonMatch) {
-    try {
-      rawRecipe = JSON.parse(jsonMatch[1] || jsonMatch[0]);
-    } catch (e) {
-      console.error("Failed to parse JSON from image scan", e);
-      throw new Error("Could not read recipe from image. Please try again.");
-    }
-  } else {
-      // Fallback: If structure fails, return a dummy or throw.
-       throw new Error("Could not detect a clear recipe structure.");
-  }
-
-  return {
-    id: crypto.randomUUID(),
-    title: rawRecipe.title || "Scanned Recipe",
-    description: rawRecipe.description || "Imported from cookbook scan",
-    prepTime: rawRecipe.prepTime || "15 mins",
-    cookTime: rawRecipe.cookTime || "30 mins",
-    servings: rawRecipe.servings || 2,
-    ingredients: rawRecipe.ingredients || [],
-    steps: rawRecipe.steps || [],
-    imageUrl: `data:image/jpeg;base64,${base64Image}`,
-    musicMood: "Chill Lo-fi",
-  };
+  return response.text || "";
 };
 
-/**
- * Gets a motivational message or detailed help for a specific step.
- */
 export const getCookingHelp = async (stepInstruction: string, context: string): Promise<string> => {
   const model = "gemini-3-flash-preview";
   const response = await ai.models.generateContent({
     model,
-    contents: `The user is cooking. Current step: "${stepInstruction}". Context: "${context}". 
-    Provide a short, reassuring, and helpful response. If they are worried about overcooking, give specific signs to look for. Keep it under 50 words.`,
+    contents: `Step: "${stepInstruction}". Context: "${context}". Give a very short, funny, or encouraging tip. Max 20 words.`,
   });
-  return response.text || "You're doing great! Trust your senses.";
+  return response.text || "You got this!";
 };
 
-/**
- * Finds nearby stores for specific ingredients using Google Maps Grounding.
- */
 export const findGroceryStores = async (ingredient: string, latitude: number, longitude: number): Promise<StoreLocation[]> => {
-  // Maps grounding is only supported in Gemini 2.5 series models.
   const model = "gemini-2.5-flash"; 
   
   const response = await ai.models.generateContent({
     model,
-    contents: `Where can I buy high quality ${ingredient} nearby?`,
+    contents: `Find 3 closest grocery stores near lat:${latitude}, long:${longitude} that likely sell ${ingredient}.`,
     config: {
       tools: [{ googleMaps: {} }],
       toolConfig: {
         retrievalConfig: {
-          latLng: {
-            latitude,
-            longitude,
-          },
+          latLng: { latitude, longitude },
         },
       },
     },
@@ -157,14 +267,15 @@ export const findGroceryStores = async (ingredient: string, latitude: number, lo
 
   const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
   
-  // Extract map data
   const stores: StoreLocation[] = groundingChunks
     .filter((chunk: any) => chunk.maps)
     .map((chunk: any) => ({
       name: chunk.maps.title,
-      address: chunk.maps.placeAnswerSources?.[0]?.placeId || "Nearby", // Simplified address handling
+      address: chunk.maps.placeAnswerSources?.[0]?.placeId || "Nearby", 
       uri: chunk.maps.uri,
+      rating: 4.5 // Mock rating as grounding doesn't always provide it
     }));
 
-  return stores;
+  const uniqueStores = Array.from(new Map(stores.map(item => [item.name, item])).values());
+  return uniqueStores.slice(0, 3);
 };
