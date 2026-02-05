@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChefHat, Home, User, Search, Globe } from 'lucide-react';
+import { ChefHat, Home, User, Search, Globe, Bell } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
 interface LayoutProps {
@@ -18,15 +18,21 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         <Link to="/" className="flex items-center gap-3">
           {/* Logo Implementation */}
           <div className="w-8 h-8 relative">
-             <img src="Logo.png" alt="Just Cook Bro" className="w-full h-full object-contain" />
+             <img src="assets/logo.png" alt="Just Cook Bro" className="w-full h-full object-contain" />
           </div>
           <h1 className="font-bold text-lg tracking-tight uppercase">Just Cook Bro</h1>
         </Link>
-        <Link to="/profile">
-           <div className="w-8 h-8 bg-gold rounded-full flex items-center justify-center text-xs font-bold text-white shadow-md">
-            JB
-           </div>
-        </Link>
+        <div className="flex items-center gap-4">
+            <Link to="/notifications" className="relative">
+                <Bell className="w-6 h-6 text-dark" />
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+            </Link>
+            <Link to="/profile">
+            <div className="w-8 h-8 bg-gold rounded-full flex items-center justify-center text-xs font-bold text-white shadow-md">
+                JB
+            </div>
+            </Link>
+        </div>
       </header>
 
       {/* Main Content */}

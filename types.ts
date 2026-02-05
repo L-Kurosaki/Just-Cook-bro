@@ -53,6 +53,23 @@ export interface Recipe {
   isPublic?: boolean; // Community feature
   dietaryTags?: string[]; // vegan, keto
   allergens?: string[]; // peanuts, dairy
+  
+  // Social Stats
+  saves?: number; // How many people added this to their cookbook
+  cooks?: number; // How many people cooked this
+
+  // Organization (Premium)
+  userCollections?: string[]; // e.g. ["Desserts", "Family"]
+}
+
+export interface Notification {
+  id: string;
+  type: 'save' | 'cook' | 'review';
+  message: string;
+  date: string;
+  read: boolean;
+  recipeId?: string;
+  actorName: string; // The person who performed the action
 }
 
 export interface UserProfile {
@@ -64,6 +81,8 @@ export interface UserProfile {
   isPremium: boolean;
   isDeleteLocked: boolean; // Enforces the Add -> Delete -> Add -> Delete cycle
   musicHistory: SpotifyTrack[]; // Persistent log of songs listened to while cooking
+  notifications?: Notification[];
+  customCollections?: string[]; // User defined categories e.g. ["Family Recipes", "Desserts"]
 }
 
 export interface ChatMessage {

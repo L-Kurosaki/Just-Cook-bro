@@ -1,17 +1,15 @@
-import { Recipe, UserProfile } from "../types";
+import { Recipe, UserProfile, Notification } from "../types";
 import { supabase, isSupabaseConfigured } from "./supabaseClient";
 
 const RECIPE_KEY = "jcb_recipes";
 const PROFILE_KEY = "jcb_profile";
+const NOTIFICATIONS_KEY = "jcb_notifications";
 
 export const storageService = {
   saveRecipes: async (recipes: Recipe[], userId?: string) => {
     // 1. Try Supabase if configured and user is logged in
     if (isSupabaseConfigured() && userId) {
       try {
-        // In a real app, we would upsert each recipe. 
-        // For simplicity, we assume we just sync the list or add new ones.
-        // This is a basic implementation of syncing local state to DB.
         for (const recipe of recipes) {
            const { error } = await supabase
             .from('recipes')
@@ -19,7 +17,7 @@ export const storageService = {
                 id: recipe.id,
                 user_id: userId,
                 title: recipe.title, 
-                content: recipe // Storing full JSON in a jsonb column
+                content: recipe 
             });
            if (error) console.error("Supabase Save Error:", error);
         }
@@ -79,16 +77,15 @@ export const storageService = {
         const { data, error } = await supabase
           .from('recipes')
           .select('content')
-          .eq('is_public', true) // Assuming you have a column for this, or check content->isPublic
+          .eq('is_public', true) 
           .limit(20);
           
         if (!error && data) {
-            // Filter client side just in case
             return data.map((row: any) => row.content as Recipe);
         }
     }
 
-    // 2. Return Mock Data for the Community Feed if offline/demo
+    // 2. Return Mock Data with Social Stats
     return [
         {
             id: 'comm-1',
@@ -102,7 +99,9 @@ export const storageService = {
             imageUrl: 'https://images.unsplash.com/photo-1564834724105-918b73d1b9e0?w=800',
             isPublic: true,
             author: 'Chef Alex',
-            reviews: []
+            reviews: [],
+            saves: 124,
+            cooks: 45
         },
         {
             id: 'comm-2',
@@ -116,7 +115,9 @@ export const storageService = {
             imageUrl: 'https://images.unsplash.com/photo-1476124369491-e7addf5db371?w=800',
             isPublic: true,
             author: 'Maria C.',
-            reviews: []
+            reviews: [],
+            saves: 89,
+            cooks: 12
         },
         {
             id: 'comm-3',
@@ -130,16 +131,73 @@ export const storageService = {
             imageUrl: 'https://images.unsplash.com/photo-1588137372308-15f75323a51d?w=800',
             isPublic: true,
             author: 'Green Eater',
-            reviews: []
+            reviews: [],
+            saves: 230,
+            cooks: 150
         }
     ];
+  },
+
+  // --- Social / Notifications ---
+
+  getNotifications: async (): Promise<Notification[]> => {
+    // In a real app, fetch from Supabase 'notifications' table.
+    // Here we return mock data + localStorage data
+    try {
+        const local = localStorage.getItem(NOTIFICATIONS_KEY);
+        const parsed: Notification[] = local ? JSON.parse(local) : [];
+        
+        // Combine with some fake "incoming" notifications for demo purposes
+        const demoNotifs: Notification[] = [
+            {
+                id: 'n-1',
+                type: 'save',
+                message: 'Chef Alex saved your "Grandma\'s Pie" recipe!',
+                date: new Date(Date.now() - 10000000).toISOString(),
+                read: false,
+                actorName: 'Chef Alex'
+            },
+            {
+                id: 'n-2',
+                type: 'cook',
+                message: 'Maria C. just cooked your "Spicy Pasta".',
+                date: new Date(Date.now() - 50000000).toISOString(),
+                read: true,
+                actorName: 'Maria C.'
+            }
+        ];
+        
+        // Merge and dedupe
+        const combined = [...parsed, ...demoNotifs].filter((v,i,a)=>a.findIndex(t=>(t.id === v.id))===i);
+        return combined.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    } catch (e) {
+        return [];
+    }
+  },
+
+  // Called when YOU save someone else's recipe
+  saveCommunityRecipe: async (recipe: Recipe, myUserId?: string) => {
+     // 1. Add to my recipes (Clone it)
+     const myCopy = { ...recipe, id: crypto.randomUUID(), isPublic: false, sourceUrl: `Community: ${recipe.author}` };
+     const myRecipes = await storageService.getRecipes(myUserId);
+     await storageService.saveRecipes([myCopy, ...myRecipes], myUserId);
+
+     // 2. Simulate notifying the original author (Client-side simulation)
+     // In a real app, this would be an API call: POST /api/recipe/${recipe.id}/save
+     console.log(`[Social] Notified ${recipe.author} that you saved their recipe.`);
+     return myCopy;
+  },
+  
+  // Called when YOU cook a recipe
+  markRecipeAsCooked: async (recipe: Recipe) => {
+     // Logic to increment 'cooks' count on the server
+     console.log(`[Social] Incrementing cook count for ${recipe.title}`);
   },
 
   saveProfile: async (profile: UserProfile, userId?: string) => {
     localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
     
     if (isSupabaseConfigured() && userId) {
-        // Sync premium status to profile table
         await supabase.from('profiles').upsert({
             id: userId,
             is_premium: profile.isPremium

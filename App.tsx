@@ -7,12 +7,13 @@ import Paywall from './components/Paywall';
 import Auth from './components/Auth';
 import SplashScreen from './components/SplashScreen';
 import ReviewSection from './components/ReviewSection';
+import NotificationsScreen from './components/NotificationsScreen';
 import { Recipe, StoreLocation, UserProfile, Review, SpotifyTrack } from './types';
 import { parseRecipeFromText, scanRecipeFromImage, findGroceryStores, extractTextFromImage, suggestRecipesFromImage, generateFullRecipeFromSuggestion, generateRecipeFromVideoFrames, extractRecipeFromUrl } from './services/geminiService';
 import { storageService } from './services/storageService';
 import { purchases, REVENUE_CAT_API_KEY } from './services/revenueCatService';
 import { supabase, isSupabaseConfigured } from './services/supabaseClient';
-import { Camera, Link as LinkIcon, Plus, MapPin, CheckCircle, Circle, ArrowRight, ArrowLeft, Heart, ShoppingBag, Settings, Crown, LogOut, Edit3, Lock, Globe, Trash2, Image as ImageIcon, AlertTriangle, ScanText, Loader, ChefHat, Sparkles, Video, Play, Film, Eye, MonitorPlay } from 'lucide-react';
+import { Camera, Link as LinkIcon, Plus, MapPin, CheckCircle, Circle, ArrowRight, ArrowLeft, Heart, ShoppingBag, Settings, Crown, LogOut, Edit3, Lock, Globe, Trash2, Image as ImageIcon, AlertTriangle, ScanText, Loader, ChefHat, Sparkles, Video, Play, Film, Eye, MonitorPlay, Bookmark, Download, FolderPlus, Folder, X } from 'lucide-react';
 
 // Fix for ImageCapture type missing in standard TS libs
 declare class ImageCapture {
@@ -150,14 +151,27 @@ const ManualRecipeForm: React.FC<{ onSave: (r: Recipe) => void, onCancel: () => 
 
 // --- Screens ---
 
-const HomeScreen: React.FC<{ recipes: Recipe[], onDelete: (id: string) => void, userProfile: UserProfile | null }> = ({ recipes, onDelete, userProfile }) => {
+const HomeScreen: React.FC<{ 
+    recipes: Recipe[], 
+    onDelete: (id: string) => void, 
+    userProfile: UserProfile | null,
+    onCreateCollection: (name: string) => void,
+    setShowPaywall: (v: boolean) => void
+}> = ({ recipes, onDelete, userProfile, onCreateCollection, setShowPaywall }) => {
   const [activeTab, setActiveTab] = useState<'my_recipes' | 'grocery'>('my_recipes');
-  const [activeFilter, setActiveFilter] = useState<string>('all');
+  // activeFilter can be 'all', 'offline', or a specific Collection Name
+  const [activeFilter, setActiveFilter] = useState<string>('all'); 
+  const [newCollectionName, setNewCollectionName] = useState("");
+  const [showAddCollection, setShowAddCollection] = useState(false);
 
-  // Filter based on dietary
+  // Filter Logic
   const filteredRecipes = recipes.filter(r => {
       if (activeFilter === 'all') return true;
       if (activeFilter === 'offline') return r.isOffline;
+      // Check if activeFilter matches a user collection
+      if (userProfile?.customCollections?.includes(activeFilter)) {
+          return r.userCollections?.includes(activeFilter);
+      }
       return true;
   });
 
@@ -170,6 +184,22 @@ const HomeScreen: React.FC<{ recipes: Recipe[], onDelete: (id: string) => void, 
     if (next.has(name)) next.delete(name);
     else next.add(name);
     setCheckedItems(next);
+  };
+
+  const handleAddCollection = () => {
+      if (!userProfile?.isPremium) {
+          setShowPaywall(true);
+          return;
+      }
+      setShowAddCollection(true);
+  };
+
+  const confirmAddCollection = () => {
+      if(newCollectionName.trim()) {
+          onCreateCollection(newCollectionName.trim());
+          setNewCollectionName("");
+          setShowAddCollection(false);
+      }
   };
 
   return (
@@ -189,18 +219,48 @@ const HomeScreen: React.FC<{ recipes: Recipe[], onDelete: (id: string) => void, 
 
       {activeTab === 'my_recipes' ? (
         <div className="mb-6">
-            <div className="flex gap-2 mb-4 overflow-x-auto pb-2 scrollbar-hide">
-                <button onClick={() => setActiveFilter('all')} className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap ${activeFilter === 'all' ? 'bg-dark text-white' : 'bg-secondary text-midGrey'}`}>All</button>
-                <button onClick={() => setActiveFilter('offline')} className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap ${activeFilter === 'offline' ? 'bg-dark text-white' : 'bg-secondary text-midGrey'}`}>Downloaded</button>
-                {userProfile?.dietaryPreferences.map(pref => (
-                     <span key={pref} className="px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700 whitespace-nowrap">{pref}</span>
+            {/* Horizontal Scrollable Filters / Collections */}
+            <div className="flex gap-2 mb-4 overflow-x-auto pb-2 scrollbar-hide items-center">
+                <button onClick={() => setActiveFilter('all')} className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${activeFilter === 'all' ? 'bg-dark text-white' : 'bg-secondary text-midGrey'}`}>All</button>
+                <button onClick={() => setActiveFilter('offline')} className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${activeFilter === 'offline' ? 'bg-dark text-white' : 'bg-secondary text-midGrey'}`}>Downloaded</button>
+                
+                {/* User Created Collections */}
+                {userProfile?.customCollections?.map(col => (
+                    <button 
+                        key={col} 
+                        onClick={() => setActiveFilter(col)} 
+                        className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors flex items-center gap-1 ${activeFilter === col ? 'bg-gold text-white' : 'bg-secondary text-midGrey'}`}
+                    >
+                        {activeFilter === col && <Folder size={10} fill="currentColor" />} {col}
+                    </button>
                 ))}
+
+                {/* Create Collection Button */}
+                <button onClick={handleAddCollection} className="px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap bg-secondary text-gold border border-gold/30 flex items-center gap-1 hover:bg-gold hover:text-white transition-colors">
+                    {userProfile?.isPremium ? <Plus size={12} /> : <Lock size={10} />}
+                    New Category
+                </button>
             </div>
+
+            {/* Inline Add Collection Form */}
+            {showAddCollection && (
+                <div className="mb-4 bg-secondary p-3 rounded-xl flex gap-2 animate-fade-in">
+                    <input 
+                        autoFocus
+                        className="flex-1 bg-white rounded-lg px-3 py-1 text-sm outline-none"
+                        placeholder="e.g. Desserts, Family Secrets"
+                        value={newCollectionName}
+                        onChange={(e) => setNewCollectionName(e.target.value)}
+                    />
+                    <button onClick={confirmAddCollection} className="bg-gold text-white px-3 rounded-lg text-xs font-bold">Add</button>
+                    <button onClick={() => setShowAddCollection(false)} className="text-midGrey px-2"><X size={16} /></button>
+                </div>
+            )}
 
             {filteredRecipes.length === 0 ? (
             <div className="text-center py-10 bg-secondary rounded-xl border border-dashed border-midGrey/30">
-                <p className="text-midGrey text-sm mb-4">No recipes found.</p>
-                <p className="text-gold font-medium">Start cooking!</p>
+                <p className="text-midGrey text-sm mb-4">No recipes in this collection.</p>
+                <p className="text-gold font-medium">Add some!</p>
             </div>
             ) : (
             filteredRecipes.map(r => (
@@ -219,7 +279,6 @@ const HomeScreen: React.FC<{ recipes: Recipe[], onDelete: (id: string) => void, 
             ))
             )}
             
-            {/* Helper text for the delete logic */}
             {!userProfile?.isPremium && userProfile?.isDeleteLocked && (
                 <p className="text-[10px] text-center text-red-400 mt-2 bg-red-50 p-2 rounded-lg">
                     Delete Locked: Add a new recipe to unlock the delete function.
@@ -248,7 +307,7 @@ const HomeScreen: React.FC<{ recipes: Recipe[], onDelete: (id: string) => void, 
   );
 };
 
-const CommunityScreen: React.FC = () => {
+const CommunityScreen: React.FC<{ onSaveRecipe: (r: Recipe) => void }> = ({ onSaveRecipe }) => {
     const [feed, setFeed] = useState<Recipe[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -260,6 +319,12 @@ const CommunityScreen: React.FC = () => {
         };
         loadFeed();
     }, []);
+
+    const handleSave = (e: React.MouseEvent, recipe: Recipe) => {
+        e.preventDefault();
+        onSaveRecipe(recipe);
+        alert("Recipe saved to your cookbook! The author has been notified.");
+    };
 
     return (
         <div className="p-6">
@@ -278,17 +343,28 @@ const CommunityScreen: React.FC = () => {
                         <div key={recipe.id} className="bg-white rounded-xl shadow-sm border border-secondary overflow-hidden">
                             <div className="h-48 relative">
                                 <img src={recipe.imageUrl} className="w-full h-full object-cover" alt={recipe.title} />
-                                <div className="absolute bottom-2 left-2 bg-white/90 px-2 py-1 rounded-lg text-xs font-bold text-dark flex items-center gap-1">
+                                <div className="absolute top-2 left-2 bg-white/90 px-2 py-1 rounded-lg text-xs font-bold text-dark flex items-center gap-1">
                                     <ChefHat size={12} /> {recipe.author || "Chef"}
                                 </div>
                             </div>
                             <div className="p-4">
                                 <h3 className="font-bold text-lg mb-1">{recipe.title}</h3>
                                 <p className="text-midGrey text-sm line-clamp-2 mb-3">{recipe.description}</p>
-                                <div className="flex items-center justify-between">
+                                
+                                <div className="flex items-center justify-between mb-3">
+                                    <div className="flex gap-4 text-xs text-midGrey">
+                                        <span className="flex items-center gap-1"><Bookmark size={12} /> {recipe.saves || 0} saved</span>
+                                        <span className="flex items-center gap-1"><Heart size={12} /> {recipe.cooks || 0} cooked</span>
+                                    </div>
                                     <span className="text-xs text-gold font-bold">{recipe.cookTime}</span>
-                                    <Heart className="w-5 h-5 text-midGrey hover:text-red-500 cursor-pointer" />
                                 </div>
+
+                                <button 
+                                    onClick={(e) => handleSave(e, recipe)}
+                                    className="w-full py-2 bg-secondary hover:bg-gold hover:text-white text-dark rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <Download size={14} /> Save to My Cookbook
+                                </button>
                             </div>
                         </div>
                     ))}
@@ -736,13 +812,15 @@ const RecipeDetailScreen: React.FC<{
     userProfile: UserProfile, 
     setShowPaywall: (v: boolean) => void,
     onAddReview: (recipeId: string, rating: number, comment: string) => void,
-    onToggleOffline: (recipeId: string) => void
-}> = ({ recipes, userProfile, setShowPaywall, onAddReview, onToggleOffline }) => {
+    onToggleOffline: (recipeId: string) => void,
+    onAssignCollection: (recipeId: string, collection: string) => void
+}> = ({ recipes, userProfile, setShowPaywall, onAddReview, onToggleOffline, onAssignCollection }) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const recipe = recipes.find(r => r.id === id);
   const [nearbyStores, setNearbyStores] = useState<{ [key: string]: StoreLocation[] }>({});
   const [loadingStores, setLoadingStores] = useState<{ [key: string]: boolean }>({});
+  const [showCollections, setShowCollections] = useState(false);
 
   if (!recipe) return <div>Not found</div>;
 
@@ -789,6 +867,23 @@ const RecipeDetailScreen: React.FC<{
       alert("Link copied! " + url);
   };
 
+  // Collection Assignment Handler
+  const handleCollectionClick = () => {
+      if (!userProfile.isPremium) {
+          setShowPaywall(true);
+      } else {
+          if (!userProfile.customCollections || userProfile.customCollections.length === 0) {
+              alert("Go to Home to create a collection first!");
+          } else {
+              setShowCollections(!showCollections);
+          }
+      }
+  };
+
+  const toggleCollection = (collection: string) => {
+      onAssignCollection(recipe.id, collection);
+  };
+
   // Check Allergy again for detail view warning
    const hasAllergy = userProfile?.allergies?.some(allergy => 
     recipe.allergens?.map(a => a.toLowerCase()).includes(allergy.toLowerCase()) ||
@@ -810,6 +905,10 @@ const RecipeDetailScreen: React.FC<{
             <div className="flex justify-between items-end mt-2">
                 <p className="text-white/80 text-sm">{recipe.description}</p>
                 <div className="flex gap-2">
+                     <button onClick={handleCollectionClick} className="bg-white/20 p-2 rounded-full text-white hover:bg-white/30 relative">
+                         <FolderPlus size={18} />
+                         {!userProfile.isPremium && <div className="absolute top-0 right-0 w-2 h-2 bg-gold rounded-full border border-black"></div>}
+                     </button>
                      <button onClick={handleShare} className="bg-white/20 p-2 rounded-full text-white"><Globe size={18} /></button>
                      <button onClick={handleDownload} className={`p-2 rounded-full text-white ${recipe.isOffline ? 'bg-green-500' : 'bg-white/20'}`}>
                         {recipe.isOffline ? <CheckCircle size={18} /> : <ArrowRight size={18} className="rotate-90" />}
@@ -824,6 +923,27 @@ const RecipeDetailScreen: React.FC<{
       </div>
 
       <div className="p-6">
+        {/* Collection Dropdown Area */}
+        {showCollections && userProfile.isPremium && (
+            <div className="mb-6 bg-secondary p-4 rounded-xl animate-fade-in border border-gold/30">
+                <h4 className="font-bold text-sm mb-3 flex items-center gap-2"><Folder size={14} className="text-gold"/> Add to Category</h4>
+                <div className="flex flex-wrap gap-2">
+                    {userProfile.customCollections?.map(col => {
+                        const isSelected = recipe.userCollections?.includes(col);
+                        return (
+                            <button 
+                                key={col} 
+                                onClick={() => toggleCollection(col)}
+                                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${isSelected ? 'bg-gold text-white shadow-md' : 'bg-white text-midGrey border border-gray-200'}`}
+                            >
+                                {col} {isSelected && "✓"}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+        )}
+
         {hasAllergy && (
              <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl mb-6 flex items-start gap-3">
                  <AlertTriangle className="shrink-0 mt-1" size={20} />
@@ -898,7 +1018,8 @@ const App: React.FC = () => {
       dietaryPreferences: [],
       allergies: [],
       isDeleteLocked: false,
-      musicHistory: [] // Init empty history
+      musicHistory: [], // Init empty history
+      customCollections: [] // Init empty collections
   });
   const [showPaywall, setShowPaywall] = useState(false);
   const [user, setUser] = useState<any>(null);
@@ -1014,6 +1135,40 @@ const App: React.FC = () => {
       storageService.saveRecipes(updated, user?.id);
   };
 
+  // Social Interaction Handler
+  const handleSaveCommunityRecipe = async (recipe: Recipe) => {
+      const newRecipe = await storageService.saveCommunityRecipe(recipe, user?.id);
+      addRecipe(newRecipe);
+  };
+
+  // --- Collection Handlers ---
+  const createCollection = (name: string) => {
+      const current = userProfile.customCollections || [];
+      if(current.includes(name)) return;
+      const updatedProfile = { ...userProfile, customCollections: [...current, name] };
+      updateProfile(updatedProfile);
+  };
+
+  const assignRecipeToCollection = (recipeId: string, collection: string) => {
+      const target = recipes.find(r => r.id === recipeId);
+      if(!target) return;
+      
+      const currentCollections = target.userCollections || [];
+      let newCollections: string[];
+
+      if(currentCollections.includes(collection)) {
+          // Remove
+          newCollections = currentCollections.filter(c => c !== collection);
+      } else {
+          // Add
+          newCollections = [...currentCollections, collection];
+      }
+      
+      const updatedRecipes = recipes.map(r => r.id === recipeId ? { ...r, userCollections: newCollections } : r);
+      setRecipes(updatedRecipes);
+      storageService.saveRecipes(updatedRecipes, user?.id);
+  };
+
   const handleLogout = async () => {
       if (isSupabaseConfigured()) await supabase.auth.signOut();
       setUser(null);
@@ -1042,9 +1197,16 @@ const App: React.FC = () => {
   return (
     <MemoryRouter>
       <Routes>
-        <Route path="/" element={<Layout><HomeScreen recipes={recipes} onDelete={deleteRecipe} userProfile={userProfile} /></Layout>} />
+        <Route path="/" element={<Layout><HomeScreen 
+            recipes={recipes} 
+            onDelete={deleteRecipe} 
+            userProfile={userProfile} 
+            onCreateCollection={createCollection}
+            setShowPaywall={setShowPaywall}
+        /></Layout>} />
         <Route path="/discover" element={<Layout><DiscoverScreen onAddRecipe={addRecipe} /></Layout>} />
-        <Route path="/community" element={<Layout><CommunityScreen /></Layout>} />
+        <Route path="/community" element={<Layout><CommunityScreen onSaveRecipe={handleSaveCommunityRecipe} /></Layout>} />
+        <Route path="/notifications" element={<Layout><NotificationsScreen /></Layout>} />
         <Route path="/profile" element={<Layout><ProfileScreen userProfile={userProfile} setPremium={(val) => updateProfile({...userProfile, isPremium: val})} onUpdateProfile={updateProfile} onLogout={handleLogout} /></Layout>} />
         <Route path="/recipe/:id" element={<Layout>
             <RecipeDetailScreen 
@@ -1053,6 +1215,7 @@ const App: React.FC = () => {
                 setShowPaywall={setShowPaywall} 
                 onAddReview={addReview}
                 onToggleOffline={toggleOffline}
+                onAssignCollection={assignRecipeToCollection}
             />
         </Layout>} />
         <Route path="/cook/:id" element={<CookingMode recipes={recipes} onAddMusicToHistory={addMusicToHistory} />} />
