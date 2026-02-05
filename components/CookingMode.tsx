@@ -1,16 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Play, Pause, SkipForward, ArrowLeft, MessageCircle, AlertCircle, Music, Volume2, Flame, Utensils, AlertTriangle, ListMusic, Plus } from 'lucide-react';
+import { Play, Pause, SkipForward, ArrowLeft, MessageCircle, AlertCircle, Music, Flame, Utensils, AlertTriangle, ListMusic, Plus, Share2, Check } from 'lucide-react';
 import { Recipe, SpotifyTrack } from '../types';
 import { getCookingHelp } from '../services/geminiService';
 import { spotifyService } from '../services/spotifyService';
 
 interface CookingModeProps {
   recipes: Recipe[];
-  onAddMusicToHistory: (track: SpotifyTrack) => void; // New prop to save history
+  onAddMusicToHistory: (track: SpotifyTrack) => void;
+  onShareToFeed: (recipe: Recipe, track?: SpotifyTrack) => void; // New prop
 }
 
-const CookingMode: React.FC<CookingModeProps> = ({ recipes, onAddMusicToHistory }) => {
+const CookingMode: React.FC<CookingModeProps> = ({ recipes, onAddMusicToHistory, onShareToFeed }) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const recipe = recipes.find(r => r.id === id);
@@ -23,22 +24,23 @@ const CookingMode: React.FC<CookingModeProps> = ({ recipes, onAddMusicToHistory 
   const [isLoadingHelp, setIsLoadingHelp] = useState(false);
   const [timerAlert, setTimerAlert] = useState(false);
   
-  // Real Spotify State
+  // Spotify State
   const [spotifyToken, setSpotifyToken] = useState<string | null>(localStorage.getItem('jcb_spotify_token'));
   const [currentTrack, setCurrentTrack] = useState<SpotifyTrack | null>(null);
   const [sessionQueue, setSessionQueue] = useState<SpotifyTrack[]>([]);
   const [showQueue, setShowQueue] = useState(false);
+  
+  // Sharing State
+  const [isShared, setIsShared] = useState(false);
 
   const currentStep = recipe?.steps[currentStepIndex];
 
   // Spotify Auth Effect
   useEffect(() => {
-    // If we just came back from Spotify Auth, check URL
     const token = spotifyService.getTokenFromUrl();
     if (token) {
         setSpotifyToken(token);
         localStorage.setItem('jcb_spotify_token', token);
-        // Clear hash to clean up URL
         window.location.hash = ""; 
     }
   }, []);
@@ -50,16 +52,13 @@ const CookingMode: React.FC<CookingModeProps> = ({ recipes, onAddMusicToHistory 
     const checkMusic = async () => {
         const track = await spotifyService.getCurrentlyPlaying(spotifyToken);
         if (track) {
-            // Check if it's a new track compared to what we have locally
             setCurrentTrack(prev => {
                 if (prev?.name !== track.name) {
-                    // It's a new song! Add to session logs
                     setSessionQueue(q => {
-                         // Avoid exact duplicates at end of queue
                          if (q.length > 0 && q[q.length -1].name === track.name) return q;
                          return [...q, track];
                     });
-                    onAddMusicToHistory(track); // Save to persistent profile
+                    onAddMusicToHistory(track);
                     return track;
                 }
                 return prev;
@@ -67,13 +66,12 @@ const CookingMode: React.FC<CookingModeProps> = ({ recipes, onAddMusicToHistory 
         }
     };
 
-    checkMusic(); // Initial check
-    const interval = setInterval(checkMusic, 20000); // Poll every 20s
+    checkMusic(); 
+    const interval = setInterval(checkMusic, 20000);
     return () => clearInterval(interval);
   }, [spotifyToken, onAddMusicToHistory]);
 
   useEffect(() => {
-    // Reset state on step change
     if (currentStep?.timeInSeconds) {
       setTimeLeft(currentStep.timeInSeconds);
       setIsTimerRunning(false);
@@ -104,9 +102,14 @@ const CookingMode: React.FC<CookingModeProps> = ({ recipes, onAddMusicToHistory 
       setCurrentStepIndex(prev => prev + 1);
       setShowHelp(false);
       setHelpMessage("");
-    } else {
-      navigate('/');
     }
+  };
+  
+  const handleShare = () => {
+      if(!recipe) return;
+      onShareToFeed(recipe, currentTrack || undefined);
+      setIsShared(true);
+      alert("Shared to community feed with your vibe!");
   };
 
   const handleAskHelp = async () => {
@@ -138,6 +141,7 @@ const CookingMode: React.FC<CookingModeProps> = ({ recipes, onAddMusicToHistory 
   if (!recipe || !currentStep) return <div className="p-6">Recipe not found</div>;
 
   const progress = ((currentStepIndex + 1) / recipe.steps.length) * 100;
+  const isFinished = currentStepIndex === recipe.steps.length - 1;
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -303,14 +307,37 @@ const CookingMode: React.FC<CookingModeProps> = ({ recipes, onAddMusicToHistory 
               Help?
             </button>
          </div>
-        
-        <button 
-          onClick={handleNextStep}
-          className="w-full bg-gold text-white text-lg font-bold py-4 rounded-xl shadow-lg active:bg-[#B89240] transition-colors flex items-center justify-center gap-2"
-        >
-          {currentStepIndex === recipe.steps.length - 1 ? "Finish Cooking! 🎉" : "Next Step"}
-          {currentStepIndex < recipe.steps.length - 1 && <SkipForward className="w-5 h-5" />}
-        </button>
+         
+         {!isFinished ? (
+            <button 
+              onClick={handleNextStep}
+              className="w-full bg-gold text-white text-lg font-bold py-4 rounded-xl shadow-lg active:bg-[#B89240] transition-colors flex items-center justify-center gap-2"
+            >
+              Next Step <SkipForward className="w-5 h-5" />
+            </button>
+         ) : (
+            <div className="flex flex-col gap-3">
+                {!isShared ? (
+                    <button 
+                      onClick={handleShare}
+                      className="w-full bg-black text-white text-lg font-bold py-4 rounded-xl shadow-lg flex items-center justify-center gap-2"
+                    >
+                       <Share2 className="w-5 h-5" /> Share to Feed
+                    </button>
+                ) : (
+                    <button className="w-full bg-green-500 text-white text-lg font-bold py-4 rounded-xl shadow-lg flex items-center justify-center gap-2 cursor-default">
+                        <Check className="w-5 h-5" /> Shared!
+                    </button>
+                )}
+                
+                <button 
+                   onClick={() => navigate('/')}
+                   className="w-full bg-secondary text-dark text-lg font-bold py-4 rounded-xl shadow-sm flex items-center justify-center gap-2"
+                >
+                    Done Cooking
+                </button>
+            </div>
+         )}
       </div>
     </div>
   );

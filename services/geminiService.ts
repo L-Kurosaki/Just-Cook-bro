@@ -4,22 +4,43 @@ import { Recipe, Step, StoreLocation } from "../types";
 // Initialize Gemini Client
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
+// Helper to format dietary context for prompts
+const formatDietaryContext = (allergies: string[] = [], diets: string[] = []) => {
+  if (allergies.length === 0 && diets.length === 0) return "";
+  return `
+    IMPORTANT DIETARY ENFORCEMENT:
+    User Allergies: ${allergies.join(", ")}.
+    User Diet: ${diets.join(", ")}.
+    
+    CRITICAL INSTRUCTION: 
+    1. Check if the recipe contains any restricted ingredients.
+    2. If it does, YOU MUST SUBSTITUTE them with valid alternatives that fit the diet (e.g., use almond milk for dairy, gluten-free flour for wheat, tofu/tempeh for meat).
+    3. Ensure the substitution maintains the texture and flavor of the dish as closely as possible.
+    4. In the 'ingredients' list, explicitly mention the substitution (e.g., "Almond Milk (Dairy-Free subst.)").
+    5. In the 'steps', ensure cooking instructions match the new ingredients (e.g., "cook tofu" instead of "cook chicken").
+    6. If the dish is completely incompatible (e.g., a steak for a vegan), create the closest thematic alternative (e.g., Cauliflower Steak).
+  `;
+};
+
 /**
  * Parses a recipe from a raw text description or URL content.
  */
-export const parseRecipeFromText = async (text: string): Promise<Recipe> => {
+export const parseRecipeFromText = async (text: string, allergies: string[] = [], diets: string[] = []): Promise<Recipe> => {
   const model = "gemini-3-flash-preview";
   
+  const dietaryPrompt = formatDietaryContext(allergies, diets);
+
   const prompt = `
     You are an expert chef API. 
     Input: "${text}"
     
-    1. If the input is a URL, attempt to extract the recipe content structure from it.
-    2. If the input is text describing a video, structure it into steps.
-    3. Identify "actionVerb" for steps (e.g., 'chop', 'boil', 'fry', 'bake', 'mix').
-    4. Provide specific "warning" for steps where timing is critical (e.g., "Garlic burns fast!").
-    5. Identify potential allergens based on ingredients.
-    6. Suggest a 'musicMood'.
+    ${dietaryPrompt}
+
+    1. Structure the input into a recipe.
+    2. Identify "actionVerb" for steps (e.g., 'chop', 'boil').
+    3. Identify "originalAuthor" if mentioned in the text (e.g. "Recipe by Grandma", "Courtesy of Chef John").
+    4. Provide specific "warning" for steps where timing is critical.
+    5. Suggest a 'musicMood'.
   `;
 
   const response = await ai.models.generateContent({
@@ -35,6 +56,8 @@ export const parseRecipeFromText = async (text: string): Promise<Recipe> => {
           prepTime: { type: Type.STRING },
           cookTime: { type: Type.STRING },
           servings: { type: Type.NUMBER },
+          originalAuthor: { type: Type.STRING },
+          originalSource: { type: Type.STRING },
           ingredients: {
             type: Type.ARRAY,
             items: {
@@ -83,21 +106,23 @@ export const parseRecipeFromText = async (text: string): Promise<Recipe> => {
 };
 
 /**
- * Analyzes a URL (YouTube, Blog, etc.) using Google Search grounding to extract recipe details
- * from descriptions, captions, or web content.
+ * Analyzes a URL (YouTube, Blog, etc.) using Google Search grounding.
+ * Adds strict attribution extraction.
  */
-export const extractRecipeFromUrl = async (url: string): Promise<Recipe> => {
+export const extractRecipeFromUrl = async (url: string, allergies: string[] = [], diets: string[] = []): Promise<Recipe> => {
     const model = "gemini-3-flash-preview";
+    const dietaryPrompt = formatDietaryContext(allergies, diets);
 
     const prompt = `
       I have this URL: ${url}
       
       Tasks:
-      1. Visit the URL or search for it to find the full content.
-      2. If it is a video (YouTube, TikTok), extract the recipe from the description, captions, or comments summary.
-      3. If it is a blog post, extract the recipe details.
-      4. Format the output into a structured JSON recipe.
-      5. Infer missing details like prepTime if not explicitly stated.
+      1. Visit the URL/Search to find the content.
+      2. Extract the recipe details.
+      3. CRITICAL: Identify the Original Creator/Author Name and their Social Handle if available.
+      4. Format into JSON.
+
+      ${dietaryPrompt}
     `;
 
     const response = await ai.models.generateContent({
@@ -114,6 +139,9 @@ export const extractRecipeFromUrl = async (url: string): Promise<Recipe> => {
                     prepTime: { type: Type.STRING },
                     cookTime: { type: Type.STRING },
                     servings: { type: Type.NUMBER },
+                    originalAuthor: { type: Type.STRING, description: "The name of the person who created the recipe" },
+                    originalSource: { type: Type.STRING, description: "The platform (e.g. YouTube, TikTok)" },
+                    socialHandle: { type: Type.STRING, description: "Their @handle or channel name" },
                     ingredients: {
                         type: Type.ARRAY,
                         items: {
@@ -152,7 +180,7 @@ export const extractRecipeFromUrl = async (url: string): Promise<Recipe> => {
     return {
         ...rawRecipe,
         id: crypto.randomUUID(),
-        imageUrl: "https://picsum.photos/800/600", // Placeholder until we can extract image from URL metadata
+        imageUrl: "https://picsum.photos/800/600",
         sourceUrl: url,
         isPremium: false,
         author: "Web Import",
@@ -163,16 +191,17 @@ export const extractRecipeFromUrl = async (url: string): Promise<Recipe> => {
 };
 
 /**
- * Step 1 of Image Gen: Suggests 6 recipes based on the image + internet search.
+ * Suggests 6 recipes based on the image.
  */
-export const suggestRecipesFromImage = async (base64Image: string): Promise<Array<{ title: string, description: string }>> => {
+export const suggestRecipesFromImage = async (base64Image: string, allergies: string[] = [], diets: string[] = []): Promise<Array<{ title: string, description: string }>> => {
     const model = "gemini-3-flash-preview";
-    
+    const dietaryPrompt = formatDietaryContext(allergies, diets);
+
     const prompt = `
-      Analyze this image of food or ingredients. 
-      Identify the food items.
-      Search the internet to find 6 distinct, highly-rated, and accurate recipes that match this food.
-      Return a list of these 6 recipes with a title and a short appetizing description for each.
+      Analyze this image of food.
+      Search for 6 distinct, accurate recipes.
+      ${dietaryPrompt}
+      Return title and description.
     `;
 
     const response = await ai.models.generateContent({
@@ -203,32 +232,26 @@ export const suggestRecipesFromImage = async (base64Image: string): Promise<Arra
     try {
         return JSON.parse(response.text || "[]");
     } catch (e) {
-        console.error("Failed to parse suggestions", e);
         return [];
     }
 };
 
 /**
- * Step 2 of Image Gen: Takes the selected suggestion and generates the full recipe.
+ * Step 2 of Image Gen.
  */
-export const generateFullRecipeFromSuggestion = async (suggestion: { title: string, description: string }, base64Image?: string): Promise<Recipe> => {
+export const generateFullRecipeFromSuggestion = async (suggestion: { title: string, description: string }, base64Image?: string, allergies: string[] = [], diets: string[] = []): Promise<Recipe> => {
     const model = "gemini-3-flash-preview";
-    
+    const dietaryPrompt = formatDietaryContext(allergies, diets);
+
     const prompt = `
-      Create a detailed, step-by-step cooking recipe for "${suggestion.title}".
-      Description context: ${suggestion.description}.
-      
-      Requirements:
-      1. List precise ingredients with amounts.
-      2. Numbered step-by-step instructions.
-      3. Identify "actionVerb" for steps.
-      4. Provide tips and warnings.
-      5. Suggest a 'musicMood'.
+      Create a detailed recipe for "${suggestion.title}".
+      Context: ${suggestion.description}.
+      ${dietaryPrompt}
     `;
 
     const response = await ai.models.generateContent({
         model,
-        contents: prompt, // We don't strictly need the image again, the text context is usually enough now
+        contents: prompt,
         config: {
             responseMimeType: "application/json",
             responseSchema: {
@@ -277,7 +300,6 @@ export const generateFullRecipeFromSuggestion = async (suggestion: { title: stri
     return {
         ...rawRecipe,
         id: crypto.randomUUID(),
-        // We use the original image if available, else a placeholder
         imageUrl: base64Image ? `data:image/jpeg;base64,${base64Image}` : "https://picsum.photos/800/600",
         isPremium: false,
         author: "AI Chef",
@@ -288,23 +310,24 @@ export const generateFullRecipeFromSuggestion = async (suggestion: { title: stri
 };
 
 /**
- * Analyzes a sequence of video frames to extract a recipe.
- * This handles cases where audio is missing/music-only and instructions are on-screen text.
+ * Video Analysis with Watermark detection for Attribution.
  */
-export const generateRecipeFromVideoFrames = async (frames: string[]): Promise<Recipe> => {
-  const model = "gemini-3-pro-preview"; // Using Pro for better multimodal reasoning
+export const generateRecipeFromVideoFrames = async (frames: string[], allergies: string[] = [], diets: string[] = []): Promise<Recipe> => {
+  const model = "gemini-3-pro-preview"; 
+  
+  const dietaryPrompt = formatDietaryContext(allergies, diets);
 
   const prompt = `
-    You are analyzing a sequence of frames from a cooking video.
-    
+    Analyze these video frames.
+    ${dietaryPrompt}
+
     TASKS:
-    1. READ ON-SCREEN TEXT: Look closely at captions, text overlays, and subtitles embedded in the images. These often contain ingredients and quantities.
-    2. ANALYZE VISUAL ACTIONS: Identify what is happening in the frames (e.g., chopping, sautéing, mixing) even if there is no text.
-    3. IGNORE BACKGROUND MUSIC: Do not assume audio context exists. Rely on the visual information.
-    4. CONSTRUCT RECIPE: Create a structured recipe based on the visual sequence.
+    1. Extract the recipe steps and ingredients.
+    2. ATTRIBUTION CHECK: Look for watermarks, TikTok handles, YouTube channel names, or text overlays identifying the creator.
+    3. If a name or handle is found, set "originalAuthor" and "socialHandle".
+    4. If the platform is identifiable (e.g. TikTok logo), set "originalSource".
   `;
 
-  // Construct parts: Prompt + All Frames
   const parts: any[] = [{ text: prompt }];
   frames.forEach(base64 => {
     parts.push({ inlineData: { mimeType: "image/jpeg", data: base64 } });
@@ -323,6 +346,9 @@ export const generateRecipeFromVideoFrames = async (frames: string[]): Promise<R
           prepTime: { type: Type.STRING },
           cookTime: { type: Type.STRING },
           servings: { type: Type.NUMBER },
+          originalAuthor: { type: Type.STRING, description: "Name extracted from watermark/text" },
+          socialHandle: { type: Type.STRING, description: "Handle extracted from watermark/text" },
+          originalSource: { type: Type.STRING },
           ingredients: {
             type: Type.ARRAY,
             items: {
@@ -371,25 +397,13 @@ export const generateRecipeFromVideoFrames = async (frames: string[]): Promise<R
 };
 
 /**
- * Legacy support / Direct scan if needed (consolidated for backward compatibility if called elsewhere)
- */
-export const scanRecipeFromImage = async (base64Image: string): Promise<Recipe> => {
-   // This is a fallback that does both steps in one if called directly.
-   const suggestions = await suggestRecipesFromImage(base64Image);
-   if (suggestions.length > 0) {
-       return generateFullRecipeFromSuggestion(suggestions[0], base64Image);
-   }
-   throw new Error("Could not generate recipe");
-};
-
-/**
- * OCR extraction for specific text blocks (ingredients or steps)
+ * OCR Legacy
  */
 export const extractTextFromImage = async (base64Image: string, type: 'ingredients' | 'steps'): Promise<string> => {
   const model = "gemini-3-flash-preview";
   const prompt = type === 'ingredients' 
-    ? "Look at this image. Extract only the food ingredients listed. Return them as a simple list, one per line. Do not include title or other text. If there are quantities, include them."
-    : "Look at this image. Extract the cooking instructions/steps. Return them as a numbered list. Do not include ingredients or title. Ignore UI elements.";
+    ? "Extract food ingredients list. One per line."
+    : "Extract cooking steps. Numbered list.";
 
   const response = await ai.models.generateContent({
     model,
@@ -414,31 +428,28 @@ export const getCookingHelp = async (stepInstruction: string, context: string): 
 
 export const findGroceryStores = async (ingredient: string, latitude: number, longitude: number): Promise<StoreLocation[]> => {
   const model = "gemini-2.5-flash"; 
-  
   const response = await ai.models.generateContent({
     model,
     contents: `Find 3 closest grocery stores near lat:${latitude}, long:${longitude} that likely sell ${ingredient}.`,
     config: {
       tools: [{ googleMaps: {} }],
-      toolConfig: {
-        retrievalConfig: {
-          latLng: { latitude, longitude },
-        },
-      },
+      toolConfig: { retrievalConfig: { latLng: { latitude, longitude } } },
     },
   });
-
   const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-  
   const stores: StoreLocation[] = groundingChunks
     .filter((chunk: any) => chunk.maps)
     .map((chunk: any) => ({
       name: chunk.maps.title,
       address: chunk.maps.placeAnswerSources?.[0]?.placeId || "Nearby", 
       uri: chunk.maps.uri,
-      rating: 4.5 // Mock rating as grounding doesn't always provide it
+      rating: 4.5
     }));
+  return Array.from(new Map(stores.map(item => [item.name, item])).values()).slice(0, 3);
+};
 
-  const uniqueStores = Array.from(new Map(stores.map(item => [item.name, item])).values());
-  return uniqueStores.slice(0, 3);
+export const scanRecipeFromImage = async (base64Image: string, allergies: string[] = [], diets: string[] = []): Promise<Recipe> => {
+   const suggestions = await suggestRecipesFromImage(base64Image, allergies, diets);
+   if (suggestions.length > 0) return generateFullRecipeFromSuggestion(suggestions[0], base64Image, allergies, diets);
+   throw new Error("Could not generate recipe");
 };

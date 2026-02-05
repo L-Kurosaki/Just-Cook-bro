@@ -43,23 +43,29 @@ export interface Recipe {
   imageUrl?: string;
   sourceUrl?: string;
   tags?: string[];
-  musicMood?: string; // Legacy suggestion, can still keep for initial vibes
+  musicMood?: string; // Legacy suggestion
   rating?: number;
   reviews?: Review[];
   isPremium?: boolean;
-  author?: string;
+  author?: string; // The "System" author e.g. "Video AI"
   authorId?: string;
   isOffline?: boolean;
   isPublic?: boolean; // Community feature
   dietaryTags?: string[]; // vegan, keto
   allergens?: string[]; // peanuts, dairy
   
-  // Social Stats
-  saves?: number; // How many people added this to their cookbook
-  cooks?: number; // How many people cooked this
+  // Attribution & Credits
+  originalAuthor?: string; // e.g. "Gordon Ramsay" or "TikTokUser123"
+  originalSource?: string; // e.g. "YouTube", "TikTok", "Instagram"
+  socialHandle?: string; // e.g. "@gordonramsay" (extracted from watermarks/text)
+  
+  // Social Stats & Sharing
+  saves?: number; 
+  cooks?: number;
+  sharedMusicTrack?: SpotifyTrack; // The track played when the user shared this
 
   // Organization (Premium)
-  userCollections?: string[]; // e.g. ["Desserts", "Family"]
+  userCollections?: string[]; 
 }
 
 export interface Notification {

@@ -13,7 +13,7 @@ import { parseRecipeFromText, scanRecipeFromImage, findGroceryStores, extractTex
 import { storageService } from './services/storageService';
 import { purchases, REVENUE_CAT_API_KEY } from './services/revenueCatService';
 import { supabase, isSupabaseConfigured } from './services/supabaseClient';
-import { Camera, Link as LinkIcon, Plus, MapPin, CheckCircle, Circle, ArrowRight, ArrowLeft, Heart, ShoppingBag, Settings, Crown, LogOut, Edit3, Lock, Globe, Trash2, Image as ImageIcon, AlertTriangle, ScanText, Loader, ChefHat, Sparkles, Video, Play, Film, Eye, MonitorPlay, Bookmark, Download, FolderPlus, Folder, X } from 'lucide-react';
+import { Camera, Link as LinkIcon, Plus, MapPin, CheckCircle, Circle, ArrowRight, ArrowLeft, Heart, ShoppingBag, Settings, Crown, LogOut, Edit3, Lock, Globe, Trash2, Image as ImageIcon, AlertTriangle, ScanText, Loader, ChefHat, Sparkles, Video, Play, Film, Eye, MonitorPlay, Bookmark, Download, FolderPlus, Folder, X, Filter, Leaf, Music, Share2, Info } from 'lucide-react';
 
 // Fix for ImageCapture type missing in standard TS libs
 declare class ImageCapture {
@@ -156,22 +156,52 @@ const HomeScreen: React.FC<{
     onDelete: (id: string) => void, 
     userProfile: UserProfile | null,
     onCreateCollection: (name: string) => void,
+    onDeleteCollection: (name: string) => void,
     setShowPaywall: (v: boolean) => void
-}> = ({ recipes, onDelete, userProfile, onCreateCollection, setShowPaywall }) => {
+}> = ({ recipes, onDelete, userProfile, onCreateCollection, onDeleteCollection, setShowPaywall }) => {
   const [activeTab, setActiveTab] = useState<'my_recipes' | 'grocery'>('my_recipes');
-  // activeFilter can be 'all', 'offline', or a specific Collection Name
   const [activeFilter, setActiveFilter] = useState<string>('all'); 
   const [newCollectionName, setNewCollectionName] = useState("");
   const [showAddCollection, setShowAddCollection] = useState(false);
+  const [strictMode, setStrictMode] = useState(false); // Dietary Filter Toggle
 
   // Filter Logic
   const filteredRecipes = recipes.filter(r => {
-      if (activeFilter === 'all') return true;
-      if (activeFilter === 'offline') return r.isOffline;
-      // Check if activeFilter matches a user collection
-      if (userProfile?.customCollections?.includes(activeFilter)) {
-          return r.userCollections?.includes(activeFilter);
+      // 1. Basic Filters (Offline / Collection)
+      let matchesCategory = true;
+      if (activeFilter === 'all') matchesCategory = true;
+      else if (activeFilter === 'offline') matchesCategory = r.isOffline;
+      else if (userProfile?.customCollections?.includes(activeFilter)) {
+          matchesCategory = r.userCollections?.includes(activeFilter);
       }
+      
+      if (!matchesCategory) return false;
+
+      // 2. Strict Dietary Mode Logic
+      if (strictMode && userProfile) {
+          // A. ALLERGY CHECK (Exclusion)
+          // Exclude if any user allergy matches recipe allergens OR ingredients
+          const hasAllergy = userProfile.allergies.some(allergy => {
+               const allergyLower = allergy.toLowerCase();
+               const matchesTag = r.allergens?.some(a => a.toLowerCase().includes(allergyLower));
+               const matchesIngredient = r.ingredients.some(i => i.name.toLowerCase().includes(allergyLower));
+               return matchesTag || matchesIngredient;
+          });
+          
+          if (hasAllergy) return false;
+
+          // B. PREFERENCE CHECK (Inclusion)
+          // Logic: Recipe MUST contain tags for ALL user preferences (Strict AND logic)
+          // e.g. User = Vegan -> Recipe must have "Vegan"
+          if (userProfile.dietaryPreferences.length > 0) {
+              const meetsDiet = userProfile.dietaryPreferences.every(pref => 
+                  r.dietaryTags?.some(tag => tag.toLowerCase() === pref.toLowerCase())
+              );
+              // Note: If recipe has NO tags but user has preferences, we hide it to be safe in strict mode.
+              if (!meetsDiet) return false;
+          }
+      }
+
       return true;
   });
 
@@ -202,14 +232,36 @@ const HomeScreen: React.FC<{
       }
   };
 
+  const handleDeleteCollection = (e: React.MouseEvent, col: string) => {
+      e.stopPropagation();
+      if (!userProfile?.isPremium) {
+          setShowPaywall(true);
+          return;
+      }
+      if (window.confirm(`Delete the "${col}" collection? Recipes inside will be kept.`)) {
+          onDeleteCollection(col);
+          if (activeFilter === col) setActiveFilter('all');
+      }
+  };
+
   return (
     <div className="p-6">
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-dark mb-1">Hey {userProfile?.name || 'Chef'},</h2>
-        <p className="text-midGrey">You have {recipes.length} recipes saved.</p>
-        {!userProfile?.isPremium && (
-            <div className="text-xs text-orange-500 mt-1">Free Plan: {recipes.length}/20 recipes used.</div>
-        )}
+      <div className="mb-6 flex justify-between items-start">
+        <div>
+            <h2 className="text-2xl font-bold text-dark mb-1">Hey {userProfile?.name || 'Chef'},</h2>
+            <p className="text-midGrey">You have {recipes.length} recipes saved.</p>
+        </div>
+        
+        {/* Strict Mode Toggle */}
+        <div 
+            onClick={() => setStrictMode(!strictMode)}
+            className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all cursor-pointer border ${strictMode ? 'bg-green-100 border-green-300' : 'bg-secondary border-transparent'}`}
+        >
+            <Leaf size={20} className={strictMode ? 'text-green-600' : 'text-midGrey'} />
+            <span className={`text-[10px] font-bold mt-1 ${strictMode ? 'text-green-700' : 'text-midGrey'}`}>
+                {strictMode ? 'Strict Diet' : 'All Foods'}
+            </span>
+        </div>
       </div>
 
       <div className="flex gap-4 mb-6 border-b border-secondary">
@@ -229,9 +281,18 @@ const HomeScreen: React.FC<{
                     <button 
                         key={col} 
                         onClick={() => setActiveFilter(col)} 
-                        className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors flex items-center gap-1 ${activeFilter === col ? 'bg-gold text-white' : 'bg-secondary text-midGrey'}`}
+                        className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors flex items-center gap-1 group ${activeFilter === col ? 'bg-gold text-white' : 'bg-secondary text-midGrey'}`}
                     >
-                        {activeFilter === col && <Folder size={10} fill="currentColor" />} {col}
+                        {activeFilter === col && <Folder size={10} fill="currentColor" />} 
+                        {col}
+                        {userProfile.isPremium && (
+                            <div 
+                                onClick={(e) => handleDeleteCollection(e, col)}
+                                className="ml-1 p-0.5 rounded-full hover:bg-red-500 hover:text-white text-current transition-colors opacity-60 hover:opacity-100"
+                            >
+                                <X size={10} />
+                            </div>
+                        )}
                     </button>
                 ))}
 
@@ -257,10 +318,21 @@ const HomeScreen: React.FC<{
                 </div>
             )}
 
+            {/* Strict Mode Info Banner */}
+            {strictMode && (
+                <div className="mb-4 bg-green-50 border border-green-100 p-3 rounded-xl flex items-center gap-3 animate-fade-in">
+                    <Filter size={16} className="text-green-600" />
+                    <div className="text-xs text-green-800">
+                        <span className="font-bold">Strict Mode Active:</span> Hiding allergens ({userProfile?.allergies.join(', ') || 'None'}) and enforcing preferences ({userProfile?.dietaryPreferences.join(', ') || 'None'}).
+                    </div>
+                </div>
+            )}
+
             {filteredRecipes.length === 0 ? (
             <div className="text-center py-10 bg-secondary rounded-xl border border-dashed border-midGrey/30">
-                <p className="text-midGrey text-sm mb-4">No recipes in this collection.</p>
-                <p className="text-gold font-medium">Add some!</p>
+                <p className="text-midGrey text-sm mb-4">No recipes found.</p>
+                {strictMode && <p className="text-xs text-red-400 mb-2">Try turning off Strict Mode or updating your profile.</p>}
+                <p className="text-gold font-medium">Start cooking!</p>
             </div>
             ) : (
             filteredRecipes.map(r => (
@@ -322,8 +394,7 @@ const CommunityScreen: React.FC<{ onSaveRecipe: (r: Recipe) => void }> = ({ onSa
 
     const handleSave = (e: React.MouseEvent, recipe: Recipe) => {
         e.preventDefault();
-        onSaveRecipe(recipe);
-        alert("Recipe saved to your cookbook! The author has been notified.");
+        onSaveRecipe(recipe); // This will handle the limit check inside App
     };
 
     return (
@@ -343,27 +414,51 @@ const CommunityScreen: React.FC<{ onSaveRecipe: (r: Recipe) => void }> = ({ onSa
                         <div key={recipe.id} className="bg-white rounded-xl shadow-sm border border-secondary overflow-hidden">
                             <div className="h-48 relative">
                                 <img src={recipe.imageUrl} className="w-full h-full object-cover" alt={recipe.title} />
-                                <div className="absolute top-2 left-2 bg-white/90 px-2 py-1 rounded-lg text-xs font-bold text-dark flex items-center gap-1">
-                                    <ChefHat size={12} /> {recipe.author || "Chef"}
-                                </div>
+                                
+                                {/* Music Vibes Badge */}
+                                {recipe.sharedMusicTrack && (
+                                    <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm px-2 py-1 rounded-full text-[10px] font-bold text-white flex items-center gap-1 border border-white/20">
+                                        <Music size={10} className="text-[#1DB954]" />
+                                        Vibing to {recipe.sharedMusicTrack.name}
+                                    </div>
+                                )}
                             </div>
+                            
                             <div className="p-4">
                                 <h3 className="font-bold text-lg mb-1">{recipe.title}</h3>
+                                
+                                {/* Attribution Section */}
+                                <div className="mb-3">
+                                    <div className="flex items-center gap-1 text-xs text-dark font-bold">
+                                        <ChefHat size={12} className="text-gold" />
+                                        {recipe.originalAuthor || recipe.author || "Community Chef"}
+                                        {recipe.originalSource && <span className="text-midGrey font-normal"> via {recipe.originalSource}</span>}
+                                    </div>
+                                    {recipe.socialHandle && (
+                                        <div className="text-[10px] text-blue-500 ml-4">
+                                            {recipe.socialHandle}
+                                        </div>
+                                    )}
+                                </div>
+
                                 <p className="text-midGrey text-sm line-clamp-2 mb-3">{recipe.description}</p>
                                 
-                                <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center justify-between mb-3 border-t border-dashed border-gray-100 pt-2">
                                     <div className="flex gap-4 text-xs text-midGrey">
                                         <span className="flex items-center gap-1"><Bookmark size={12} /> {recipe.saves || 0} saved</span>
                                         <span className="flex items-center gap-1"><Heart size={12} /> {recipe.cooks || 0} cooked</span>
                                     </div>
-                                    <span className="text-xs text-gold font-bold">{recipe.cookTime}</span>
+                                    {/* Comments disabled hint */}
+                                    <div className="text-[10px] text-gray-300 flex items-center gap-1">
+                                        <Lock size={8} /> Comments locked
+                                    </div>
                                 </div>
 
                                 <button 
                                     onClick={(e) => handleSave(e, recipe)}
-                                    className="w-full py-2 bg-secondary hover:bg-gold hover:text-white text-dark rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-2"
+                                    className="w-full py-3 bg-secondary hover:bg-gold hover:text-white text-dark rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2"
                                 >
-                                    <Download size={14} /> Save to My Cookbook
+                                    <Download size={16} /> Save to Unlock & View
                                 </button>
                             </div>
                         </div>
@@ -374,7 +469,7 @@ const CommunityScreen: React.FC<{ onSaveRecipe: (r: Recipe) => void }> = ({ onSa
     );
 };
 
-const DiscoverScreen: React.FC<{ onAddRecipe: (r: Recipe) => void }> = ({ onAddRecipe }) => {
+const DiscoverScreen: React.FC<{ onAddRecipe: (r: Recipe) => void, userProfile: UserProfile }> = ({ onAddRecipe, userProfile }) => {
   const [activeMode, setActiveMode] = useState<'scan' | 'smart_link'>('scan');
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -391,6 +486,9 @@ const DiscoverScreen: React.FC<{ onAddRecipe: (r: Recipe) => void }> = ({ onAddR
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const allergies = userProfile.allergies || [];
+  const diets = userProfile.dietaryPreferences || [];
+
   // --- 1. HANDLE TEXT/LINK ANALYSIS (FALLBACK) ---
   const handleTextSubmit = async () => {
     if (!inputText.trim()) return;
@@ -399,11 +497,11 @@ const DiscoverScreen: React.FC<{ onAddRecipe: (r: Recipe) => void }> = ({ onAddR
     try {
       // If it looks like a URL, use the enhanced URL extractor
       if (inputText.startsWith('http')) {
-        const recipe = await extractRecipeFromUrl(inputText);
+        const recipe = await extractRecipeFromUrl(inputText, allergies, diets);
         onAddRecipe(recipe);
         navigate(`/recipe/${recipe.id}`);
       } else {
-        const recipe = await parseRecipeFromText(inputText);
+        const recipe = await parseRecipeFromText(inputText, allergies, diets);
         onAddRecipe(recipe);
         navigate(`/recipe/${recipe.id}`);
       }
@@ -467,7 +565,7 @@ const DiscoverScreen: React.FC<{ onAddRecipe: (r: Recipe) => void }> = ({ onAddR
             setLoadingStage("Analyzing captured video footage...");
             
             try {
-                const recipe = await generateRecipeFromVideoFrames(frames);
+                const recipe = await generateRecipeFromVideoFrames(frames, allergies, diets);
                 onAddRecipe(recipe);
                 navigate(`/recipe/${recipe.id}`);
             } catch (e) {
@@ -503,7 +601,7 @@ const DiscoverScreen: React.FC<{ onAddRecipe: (r: Recipe) => void }> = ({ onAddR
         const base64String = (reader.result as string).replace("data:", "").replace(/^.+,/, "");
         setCurrentImage(base64String);
         try {
-            const options = await suggestRecipesFromImage(base64String);
+            const options = await suggestRecipesFromImage(base64String, allergies, diets);
             setSuggestions(options);
         } catch (err) {
             alert("Could not analyze image. Please try again.");
@@ -524,7 +622,7 @@ const DiscoverScreen: React.FC<{ onAddRecipe: (r: Recipe) => void }> = ({ onAddR
       setIsLoading(true);
       setLoadingStage(`Creating recipe for ${suggestion.title}...`);
       try {
-          const recipe = await generateFullRecipeFromSuggestion(suggestion, currentImage);
+          const recipe = await generateFullRecipeFromSuggestion(suggestion, currentImage, allergies, diets);
           onAddRecipe(recipe);
           navigate(`/recipe/${recipe.id}`);
       } catch (e) {
@@ -713,6 +811,7 @@ const ProfileScreen: React.FC<{ userProfile: UserProfile, setPremium: (val: bool
     const [editMode, setEditMode] = useState(false);
     const [dietary, setDietary] = useState(userProfile.dietaryPreferences.join(', '));
     const [allergies, setAllergies] = useState(userProfile.allergies.join(', '));
+    const [showMusicHistory, setShowMusicHistory] = useState(false);
 
     const handleSaveProfile = () => {
         onUpdateProfile({
@@ -721,6 +820,21 @@ const ProfileScreen: React.FC<{ userProfile: UserProfile, setPremium: (val: bool
             allergies: allergies.split(',').map(s => s.trim()).filter(s => s)
         });
         setEditMode(false);
+    };
+
+    const handleShareMusic = () => {
+        if (!userProfile.musicHistory || userProfile.musicHistory.length === 0) return;
+        
+        const text = "🎵 My Kitchen Jams from Just Cook Bro:\n" + 
+                     userProfile.musicHistory.slice(0, 5).map(t => `- ${t.name} by ${t.artist}`).join('\n') +
+                     "\n...and more!";
+        
+        if (navigator.share) {
+            navigator.share({ title: 'My Cooking Playlist', text }).catch(console.error);
+        } else {
+            navigator.clipboard.writeText(text);
+            alert("Playlist copied to clipboard!");
+        }
     };
 
     return (
@@ -745,6 +859,45 @@ const ProfileScreen: React.FC<{ userProfile: UserProfile, setPremium: (val: bool
                         )}
                     </div>
                 </div>
+            </div>
+
+            {/* Music History Section */}
+            <div className="bg-white border border-secondary rounded-xl p-4 mb-6">
+                 <div className="flex justify-between items-center mb-2" onClick={() => setShowMusicHistory(!showMusicHistory)}>
+                     <div className="flex items-center gap-2">
+                         <Music size={18} className="text-[#1DB954]" />
+                         <h3 className="font-bold text-sm">Music Logs</h3>
+                     </div>
+                     <button className="text-xs text-midGrey font-bold">
+                        {showMusicHistory ? "Hide" : "View"}
+                     </button>
+                 </div>
+                 
+                 {showMusicHistory && (
+                     <div className="mt-3 animate-fade-in">
+                         {(!userProfile.musicHistory || userProfile.musicHistory.length === 0) ? (
+                             <p className="text-xs text-midGrey italic">No music logged yet. Connect Spotify while cooking!</p>
+                         ) : (
+                             <>
+                                <div className="max-h-40 overflow-y-auto space-y-2 mb-3">
+                                    {userProfile.musicHistory.slice().reverse().map((track, idx) => (
+                                        <div key={idx} className="flex items-center gap-3 bg-secondary/30 p-2 rounded-lg">
+                                            {track.albumArt ? <img src={track.albumArt} className="w-8 h-8 rounded" alt="" /> : <div className="w-8 h-8 bg-gray-200 rounded"/>}
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-xs font-bold truncate">{track.name}</p>
+                                                <p className="text-[10px] text-midGrey truncate">{track.artist}</p>
+                                            </div>
+                                            <span className="text-[8px] text-gray-400">{new Date(track.playedAt).toLocaleDateString()}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                                <button onClick={handleShareMusic} className="w-full py-2 bg-[#1DB954]/10 text-[#1DB954] rounded-lg text-xs font-bold flex items-center justify-center gap-2">
+                                    <Share2 size={12} /> Share Logs
+                                </button>
+                             </>
+                         )}
+                     </div>
+                 )}
             </div>
 
             {/* Dietary Settings */}
@@ -944,6 +1097,23 @@ const RecipeDetailScreen: React.FC<{
             </div>
         )}
 
+        {/* Attribution & Credit Box */}
+        {(recipe.originalAuthor || recipe.originalSource) && (
+             <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl mb-6 flex items-start gap-3">
+                 <Info size={20} className="text-blue-500 shrink-0 mt-0.5" />
+                 <div>
+                     <h4 className="font-bold text-sm text-blue-900 mb-1">Recipe Credits</h4>
+                     <p className="text-xs text-blue-800">
+                         Original by <span className="font-bold">{recipe.originalAuthor || "Unknown Creator"}</span>
+                         {recipe.originalSource && <span> on {recipe.originalSource}</span>}.
+                     </p>
+                     {recipe.socialHandle && (
+                         <p className="text-xs text-blue-600 font-bold mt-1">{recipe.socialHandle}</p>
+                     )}
+                 </div>
+             </div>
+        )}
+
         {hasAllergy && (
              <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl mb-6 flex items-start gap-3">
                  <AlertTriangle className="shrink-0 mt-1" size={20} />
@@ -1061,9 +1231,9 @@ const App: React.FC = () => {
   }, [user, loading]);
 
   const addRecipe = (newRecipe: Recipe) => {
-    // Limit Check
+    // Limit Check - STRICT 20 for Free Users
     if (!userProfile.isPremium && recipes.length >= 20) {
-        alert("Free limit reached (20 recipes). Upgrade to Pro to add more!");
+        alert("Cookbook Full! Free users can only save 20 recipes. Upgrade to save more.");
         setShowPaywall(true);
         return;
     }
@@ -1137,8 +1307,37 @@ const App: React.FC = () => {
 
   // Social Interaction Handler
   const handleSaveCommunityRecipe = async (recipe: Recipe) => {
+     // Check limit via addRecipe logic (simplified)
+      if (!userProfile.isPremium && recipes.length >= 20) {
+          alert("Cookbook Full! Upgrade to Pro to save more recipes.");
+          setShowPaywall(true);
+          return;
+      }
+
       const newRecipe = await storageService.saveCommunityRecipe(recipe, user?.id);
       addRecipe(newRecipe);
+      alert("Recipe unlocked and saved to your cookbook!");
+  };
+  
+  // Share Handler (From Cooking Mode)
+  const handleShareToFeed = async (recipe: Recipe, track?: SpotifyTrack) => {
+      // Mark as public and attach music metadata
+      const feedRecipe: Recipe = {
+          ...recipe,
+          isPublic: true,
+          sharedMusicTrack: track
+      };
+      // We don't save this to the local 'recipes' list again, 
+      // but strictly we should send it to the 'public' database.
+      // Since we mock the backend, let's just update the existing local recipe to be public
+      // so it hypothetically syncs.
+      
+      const updated = recipes.map(r => r.id === recipe.id ? feedRecipe : r);
+      setRecipes(updated);
+      storageService.saveRecipes(updated, user?.id);
+      
+      // Also send to mock "Community" DB
+      await storageService.saveCommunityRecipe(feedRecipe);
   };
 
   // --- Collection Handlers ---
@@ -1146,6 +1345,13 @@ const App: React.FC = () => {
       const current = userProfile.customCollections || [];
       if(current.includes(name)) return;
       const updatedProfile = { ...userProfile, customCollections: [...current, name] };
+      updateProfile(updatedProfile);
+  };
+  
+  const deleteCollection = (name: string) => {
+      if (!userProfile.isPremium) return;
+      const current = userProfile.customCollections || [];
+      const updatedProfile = { ...userProfile, customCollections: current.filter(c => c !== name) };
       updateProfile(updatedProfile);
   };
 
@@ -1202,9 +1408,10 @@ const App: React.FC = () => {
             onDelete={deleteRecipe} 
             userProfile={userProfile} 
             onCreateCollection={createCollection}
+            onDeleteCollection={deleteCollection}
             setShowPaywall={setShowPaywall}
         /></Layout>} />
-        <Route path="/discover" element={<Layout><DiscoverScreen onAddRecipe={addRecipe} /></Layout>} />
+        <Route path="/discover" element={<Layout><DiscoverScreen onAddRecipe={addRecipe} userProfile={userProfile} /></Layout>} />
         <Route path="/community" element={<Layout><CommunityScreen onSaveRecipe={handleSaveCommunityRecipe} /></Layout>} />
         <Route path="/notifications" element={<Layout><NotificationsScreen /></Layout>} />
         <Route path="/profile" element={<Layout><ProfileScreen userProfile={userProfile} setPremium={(val) => updateProfile({...userProfile, isPremium: val})} onUpdateProfile={updateProfile} onLogout={handleLogout} /></Layout>} />
@@ -1218,7 +1425,7 @@ const App: React.FC = () => {
                 onAssignCollection={assignRecipeToCollection}
             />
         </Layout>} />
-        <Route path="/cook/:id" element={<CookingMode recipes={recipes} onAddMusicToHistory={addMusicToHistory} />} />
+        <Route path="/cook/:id" element={<CookingMode recipes={recipes} onAddMusicToHistory={addMusicToHistory} onShareToFeed={handleShareToFeed} />} />
       </Routes>
       
       {showPaywall && (
