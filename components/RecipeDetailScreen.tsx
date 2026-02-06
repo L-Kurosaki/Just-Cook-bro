@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, Image, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { ArrowLeft, Clock, Users, Heart, MapPin, Download, ChefHat, Folder, Lock, Plus, Globe, AlertTriangle, Crown, Save, ShoppingCart } from 'lucide-react-native';
-import { Recipe, UserProfile, StoreLocation } from '../types';
+import { Recipe, UserProfile, StoreLocation, Review } from '../types';
 import ReviewSection from './ReviewSection';
 import { findGroceryStores } from '../services/geminiService';
 import { storageService } from '../services/storageService';
+import { supabase } from '../services/supabaseClient';
 
 interface RecipeDetailProps {
   recipes: Recipe[];
@@ -20,7 +21,7 @@ interface RecipeDetailProps {
 const RecipeDetailScreen: React.FC<RecipeDetailProps> = ({ 
   recipes, 
   userProfile, 
-  onAddReview, 
+  onAddReview, // Deprecated in favor of internal handling
   onToggleOffline, 
   onAssignCollection, 
   onSaveRecipe,
@@ -30,7 +31,7 @@ const RecipeDetailScreen: React.FC<RecipeDetailProps> = ({
   const navigation = useNavigation<any>();
   const { id, recipeData } = route.params;
   
-  // Try to find in local recipes, otherwise use passed data (Community view)
+  // Try to find in local recipes (My Cookbook), otherwise use passed data (Community view)
   const localRecipe = recipes.find(r => r.id === id);
   const recipe = localRecipe || recipeData;
   const isOwned = !!localRecipe;
@@ -38,6 +39,44 @@ const RecipeDetailScreen: React.FC<RecipeDetailProps> = ({
   const [activeTab, setActiveTab] = useState<'ingredients' | 'steps'>('ingredients');
   const [stores, setStores] = useState<StoreLocation[]>([]);
   const [loadingStores, setLoadingStores] = useState(false);
+  
+  // Real reviews state
+  const [reviews, setReviews] = useState<Review[]>(recipe.reviews || []);
+  const [loadingReviews, setLoadingReviews] = useState(false);
+
+  useEffect(() => {
+      fetchReviews();
+  }, [recipe.id]);
+
+  const fetchReviews = async () => {
+      setLoadingReviews(true);
+      const data = await storageService.getReviewsForRecipe(recipe.id);
+      if (data.length > 0) {
+          setReviews(data);
+      }
+      setLoadingReviews(false);
+  };
+
+  const handleAddReviewInternal = async (rating: number, comment: string) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+          Alert.alert("Please sign in to review");
+          return;
+      }
+
+      const newReview = {
+          userId: user.id,
+          userName: userProfile.name || 'Chef',
+          rating,
+          comment
+      };
+
+      await storageService.addReview(recipe.id, newReview);
+      
+      // Refresh
+      await fetchReviews();
+      Alert.alert("Thanks!", "Your review has been posted.");
+  };
 
   if (!recipe) return <View className="flex-1 justify-center items-center"><Text>Recipe not found</Text></View>;
 
@@ -54,7 +93,7 @@ const RecipeDetailScreen: React.FC<RecipeDetailProps> = ({
   };
 
   const handleStartCooking = () => {
-    navigation.navigate('Cook', { id: recipe.id }); // Cooking mode might need update to handle non-local ID lookup if we want to cook directly
+    navigation.navigate('Cook', { id: recipe.id }); 
   };
 
   const handleSaveToCookbook = () => {
@@ -64,9 +103,7 @@ const RecipeDetailScreen: React.FC<RecipeDetailProps> = ({
   };
 
   const addToShoppingList = (ingredient: string) => {
-     // Simple integration for now
      Alert.alert("Shopping List", `${ingredient} added to shopping list!`);
-     // In a real app, this would update storageService
   };
 
   const hasAllergy = userProfile?.allergies?.some(allergy => 
@@ -257,9 +294,9 @@ const RecipeDetailScreen: React.FC<RecipeDetailProps> = ({
            </View>
 
            <ReviewSection 
-               reviews={recipe.reviews || []} 
-               onAddReview={(r, c) => onAddReview(recipe.id, r, c)} 
-               canReview={isOwned} 
+               reviews={reviews} 
+               onAddReview={handleAddReviewInternal} 
+               canReview={true} // Allow reviewing any recipe now
            />
            <View className="h-20" />
        </View>

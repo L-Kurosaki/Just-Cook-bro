@@ -1,4 +1,4 @@
-import { Recipe, UserProfile, Notification, ShopItem } from "../types";
+import { Recipe, UserProfile, Notification, ShopItem, Review } from "../types";
 import { supabase, isSupabaseConfigured } from "./supabaseClient";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -103,6 +103,42 @@ export const storageService = {
     await setLocal(RECIPE_KEY, updated);
   },
 
+  // --- REVIEWS & SOCIAL ---
+
+  getReviewsForRecipe: async (recipeId: string): Promise<Review[]> => {
+    if (isSupabaseConfigured()) {
+      const { data, error } = await supabase
+        .from('reviews')
+        .select('*')
+        .eq('recipe_id', recipeId)
+        .order('created_at', { ascending: false });
+      
+      if (!error && data) {
+        return data.map(r => ({
+           id: r.id,
+           userId: r.user_id,
+           userName: r.user_name || 'Chef',
+           rating: r.rating,
+           comment: r.comment,
+           date: r.created_at
+        }));
+      }
+    }
+    return [];
+  },
+
+  addReview: async (recipeId: string, review: Omit<Review, 'id' | 'date'>) => {
+    if (isSupabaseConfigured()) {
+       await supabase.from('reviews').insert({
+         recipe_id: recipeId,
+         user_id: review.userId,
+         user_name: review.userName,
+         rating: review.rating,
+         comment: review.comment
+       });
+    }
+  },
+
   // --- PUBLIC / COMMUNITY ---
 
   getPublicRecipes: async (): Promise<Recipe[]> => {
@@ -156,13 +192,16 @@ export const storageService = {
   },
 
   saveCommunityRecipe: async (recipe: Recipe, myUserId?: string) => {
+     // When "saving" a community recipe, we fork it into the user's cookbook
      return { 
          ...recipe, 
          id: crypto.randomUUID(), 
          isPublic: false, 
          sourceUrl: `Community: ${recipe.author}`,
          originalAuthor: recipe.originalAuthor || recipe.author,
-         originalSource: 'Just Cook Bro Community'
+         originalSource: 'Just Cook Bro Community',
+         userCollections: [], // Reset collections
+         reviews: [] // Reset reviews on the personal copy
      };
   },
 
