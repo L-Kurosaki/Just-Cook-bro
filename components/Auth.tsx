@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Platform, ScrollView } from 'react-native';
 import { supabase } from '../services/supabaseClient';
-import { LogIn, UserPlus, ChefHat } from 'lucide-react-native';
+import { LogIn, UserPlus, ChefHat, User, Phone } from 'lucide-react-native';
 
 interface AuthProps {
   onAuthSuccess: (user: any) => void;
@@ -10,6 +10,9 @@ interface AuthProps {
 const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
+  
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -18,6 +21,11 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
     if (!email || !password) {
       setError("Please enter both email and password.");
       return;
+    }
+
+    if (!isLogin && (!fullName || !phone)) {
+       setError("Please enter your name and phone number.");
+       return;
     }
 
     setLoading(true);
@@ -40,7 +48,11 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
               email, 
               password,
               options: {
-                  emailRedirectTo: redirectTo
+                  emailRedirectTo: redirectTo,
+                  data: {
+                      full_name: fullName,
+                      phone: phone
+                  }
               }
           });
       }
@@ -78,7 +90,8 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
 
   return (
     <View className="flex-1 items-center justify-center bg-white p-6">
-      <View className="items-center mb-10">
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', width: '100%' }}>
+      <View className="items-center mb-10 mt-10">
         <View className="w-32 h-32 mb-4 bg-gold/10 rounded-full items-center justify-center border-4 border-gold/20">
              <ChefHat size={64} stroke="#C9A24D" />
         </View>
@@ -111,6 +124,37 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
         )}
 
         <View className="space-y-4 gap-4">
+          
+          {!isLogin && (
+            <>
+                <View>
+                    <Text className="text-xs font-bold text-dark mb-1 ml-1">Full Name</Text>
+                    <View className="relative">
+                        <View className="absolute left-3 top-3 z-10"><User size={16} stroke="#6B6B6B" /></View>
+                        <TextInput 
+                            className="w-full p-3 pl-10 bg-white rounded-xl text-sm border border-gray-100 focus:border-gold"
+                            placeholder="Gordon Ramsay"
+                            value={fullName}
+                            onChangeText={setFullName}
+                        />
+                    </View>
+                </View>
+                <View>
+                    <Text className="text-xs font-bold text-dark mb-1 ml-1">Cellphone Number</Text>
+                    <View className="relative">
+                        <View className="absolute left-3 top-3 z-10"><Phone size={16} stroke="#6B6B6B" /></View>
+                        <TextInput 
+                            keyboardType="phone-pad"
+                            className="w-full p-3 pl-10 bg-white rounded-xl text-sm border border-gray-100 focus:border-gold"
+                            placeholder="+1 555 0123"
+                            value={phone}
+                            onChangeText={setPhone}
+                        />
+                    </View>
+                </View>
+            </>
+          )}
+
           <View>
             <Text className="text-xs font-bold text-dark mb-1 ml-1">Email Address</Text>
             <TextInput 
@@ -147,6 +191,7 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
           </TouchableOpacity>
         </View>
       </View>
+      </ScrollView>
     </View>
   );
 };

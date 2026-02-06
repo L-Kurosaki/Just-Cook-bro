@@ -218,29 +218,54 @@ export const storageService = {
             allergies: profile.allergies,
             is_delete_locked: profile.isDeleteLocked,
             music_history: profile.musicHistory,
-            custom_collections: profile.customCollections
+            custom_collections: profile.customCollections,
+            // Assuming the schema has columns for phone/metadata, or we store it in a generic field
+            // But usually we rely on auth.users for phone/email, and this table for app specifics
+            // If you added phone to public.profiles, include it here:
+            // phone_number: profile.phoneNumber
         });
     }
   },
 
   getProfile: async (userId?: string): Promise<UserProfile | null> => {
     if (isSupabaseConfigured() && userId) {
-        const { data, error } = await supabase
+        // Fetch from profile table
+        const { data: profileData, error: profileError } = await supabase
             .from('profiles')
             .select('*')
             .eq('id', userId)
             .single();
-            
-        if (!error && data) {
+        
+        // Fetch metadata from auth user to get name/phone if profile is empty or to sync
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        const metaName = user?.user_metadata?.full_name;
+        const metaPhone = user?.user_metadata?.phone;
+
+        if (!profileError && profileData) {
             return {
-                name: data.email || "Chef",
-                email: data.email,
-                isPremium: data.is_premium,
-                dietaryPreferences: data.dietary_preferences || [],
-                allergies: data.allergies || [],
-                isDeleteLocked: data.is_delete_locked || false,
-                musicHistory: data.music_history || [],
-                customCollections: data.custom_collections || []
+                name: metaName || profileData.email || "Chef",
+                email: profileData.email,
+                phoneNumber: metaPhone,
+                isPremium: profileData.is_premium,
+                dietaryPreferences: profileData.dietary_preferences || [],
+                allergies: profileData.allergies || [],
+                isDeleteLocked: profileData.is_delete_locked || false,
+                musicHistory: profileData.music_history || [],
+                customCollections: profileData.custom_collections || []
+            };
+        } else if (user) {
+            // New user, no profile row yet
+             return {
+                name: metaName || "Chef",
+                phoneNumber: metaPhone,
+                email: user.email,
+                isPremium: false,
+                dietaryPreferences: [],
+                allergies: [],
+                isDeleteLocked: false,
+                musicHistory: [],
+                customCollections: []
             };
         }
     }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, ActivityIndicator, SafeAreaView, Alert } from 'react-native';
+import { View, ActivityIndicator, SafeAreaView, Alert, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -51,7 +51,7 @@ const HomeScreen = ({ navigation }: any) => {
       <View className="p-6">
         <View className="mb-6 flex-row justify-between items-start">
             <View>
-                <Text className="text-2xl font-bold text-dark">Hey {userProfile?.name?.split('@')[0] || 'Chef'},</Text>
+                <Text className="text-2xl font-bold text-dark">Hey {userProfile?.name?.split(' ')[0] || 'Chef'},</Text>
                 <Text className="text-midGrey">You have {recipes.length} recipes saved.</Text>
             </View>
             <View className="flex-row gap-3">
@@ -93,36 +93,64 @@ const DiscoverScreen = ({ navigation }: any) => {
   const [activeMode, setActiveMode] = useState<'scan' | 'link'>('scan');
   const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
 
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      base64: true,
+      base64: true, // Only guaranteed on Native
       quality: 0.5,
     });
 
-    if (!result.canceled && result.assets[0].base64) {
+    if (!result.canceled) {
       setLoading(true);
+      setStatusMessage("Analyzing Food...");
+      
       try {
-          const suggestions = await suggestRecipesFromImage(result.assets[0].base64);
-          if(suggestions.length > 0) {
-              const recipe = await generateFullRecipeFromSuggestion(suggestions[0], result.assets[0].base64);
-              
-              const { data: { user } } = await supabase.auth.getUser();
-              await storageService.addRecipe(recipe, user?.id);
-              
-              setLoading(false);
-              navigation.navigate('Home');
+          // On Web, ImagePicker often returns a blob URI, not base64. We must convert it.
+          let base64Data = result.assets[0].base64;
+          
+          if (!base64Data && Platform.OS === 'web') {
+              const response = await fetch(result.assets[0].uri);
+              const blob = await response.blob();
+              base64Data = await new Promise((resolve, reject) => {
+                  const reader = new FileReader();
+                  reader.onloadend = () => {
+                      const base64String = reader.result as string;
+                      // Remove data url prefix (e.g. "data:image/jpeg;base64,")
+                      resolve(base64String.split(',')[1]); 
+                  };
+                  reader.onerror = reject;
+                  reader.readAsDataURL(blob);
+              });
           }
-      } catch (e) {
-          Alert.alert("Error", "Could not analyze image");
+
+          if (base64Data) {
+              const suggestions = await suggestRecipesFromImage(base64Data);
+              if(suggestions.length > 0) {
+                  setStatusMessage("Writing Recipe...");
+                  const recipe = await generateFullRecipeFromSuggestion(suggestions[0], base64Data);
+                  
+                  const { data: { user } } = await supabase.auth.getUser();
+                  await storageService.addRecipe(recipe, user?.id);
+                  
+                  setLoading(false);
+                  navigation.navigate('Home');
+              } else {
+                  throw new Error("No recipes found in image.");
+              }
+          }
+      } catch (e: any) {
+          Alert.alert("Scan Failed", e.message || "Could not analyze image. Try a clearer photo.");
           setLoading(false);
       }
     }
   };
 
   const handleLink = async () => {
+      if (!inputText.trim()) return;
       setLoading(true);
+      setStatusMessage("Reading Website...");
       try {
           const recipe = await extractRecipeFromUrl(inputText);
           const { data: { user } } = await supabase.auth.getUser();
@@ -130,13 +158,14 @@ const DiscoverScreen = ({ navigation }: any) => {
           
           setLoading(false);
           navigation.navigate('Home');
-      } catch(e) {
-          Alert.alert("Error", "Could not extract recipe");
+      } catch(e: any) {
+          console.error(e);
+          Alert.alert("Import Failed", "Could not extract recipe. This might be due to the website blocking access. Try pasting the text directly if possible.");
           setLoading(false);
       }
   };
 
-  if (loading) return <View className="flex-1 justify-center items-center"><ActivityIndicator size="large" color="#C9A24D" /><Text className="mt-4 text-dark font-bold">Chef is working...</Text></View>;
+  if (loading) return <View className="flex-1 justify-center items-center gap-4"><ActivityIndicator size="large" color="#C9A24D" /><Text className="text-dark font-bold text-lg">{statusMessage || "Chef is working..."}</Text></View>;
 
   return (
     <SafeAreaView className="flex-1 bg-white p-6">
