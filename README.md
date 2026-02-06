@@ -63,6 +63,22 @@
     npx expo start
     ```
 
+## 🌐 Deployment & Hosting
+
+To host this app for others to test (e.g., on Vercel, Netlify, or Expo Web), you must configure your **Environment Variables** on the hosting platform.
+
+1.  **Build for Web:**
+    ```bash
+    npx expo export -p web
+    ```
+
+2.  **Configure API Key:**
+    In your hosting project settings (e.g., Vercel Dashboard > Settings > Environment Variables), add:
+    *   **Key:** `API_KEY`
+    *   **Value:** `AIzaSy...` (Your actual Google Gemini API Key)
+
+    *Note: Since this is a client-side app, the API key will be embedded in the browser bundle. For a commercial production app, it is recommended to proxy these calls through a backend server.*
+
 ## 🗄️ Database Schema (Supabase)
 
 This app requires specific tables in Supabase to function. Run the following in your Supabase **SQL Editor**:
