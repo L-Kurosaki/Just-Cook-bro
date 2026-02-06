@@ -3,8 +3,15 @@ import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState } from 'react-native';
 
-const SUPABASE_URL = 'https://ltkfrfsowjgrdnqzewah.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx0a2ZyZnNvd2pncmRucXpld2FoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyNDg1NzEsImV4cCI6MjA4NTgyNDU3MX0.nki1OGBMkgoXlj-5FO3mD6_TtNgzcnyRNsUZk749KtM';
+// SECURITY UPDATE:
+// Do not hardcode keys. Use environment variables.
+// On Netlify, add these as "EXPO_PUBLIC_SUPABASE_URL" and "EXPO_PUBLIC_SUPABASE_ANON_KEY"
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.warn("Supabase keys are missing. Please check your Environment Variables.");
+}
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
@@ -25,5 +32,5 @@ AppState.addEventListener('change', (state) => {
 });
 
 export const isSupabaseConfigured = () => {
-  return true;
+  return !!SUPABASE_URL && !!SUPABASE_ANON_KEY;
 };

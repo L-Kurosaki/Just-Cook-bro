@@ -6,13 +6,14 @@ import { SubscriptionPackage } from "../types";
 // import Purchases from 'react-native-purchases';
 
 const ENTITLEMENT_ID = "Just Cook Bro Pro";
-const API_KEY = "test_dwHcXCrwnKHRBVZddIqsHzYIEgh";
+// Use an environment variable or a placeholder. Do not commit real keys.
+const API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_KEY || "simulated_key";
 
 class RevenueCatService {
   private isPremium = false;
 
   async configure(apiKey: string) {
-    console.log(`[RevenueCat] Configured with API Key: ${apiKey}`);
+    console.log(`[RevenueCat] Configured`);
     // Simulating checking entitlement state
     this.isPremium = false; 
   }

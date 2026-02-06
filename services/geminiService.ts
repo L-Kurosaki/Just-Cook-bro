@@ -2,14 +2,16 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Recipe, Step, StoreLocation } from "../types";
 
 // Initialize Gemini Client Lazily
-// This prevents top-level crashes if process.env is undefined in some web contexts
 const getAi = () => {
   // Safe access to process.env for web environments
-  const apiKey = typeof process !== 'undefined' && process.env 
-    ? process.env.API_KEY 
-    : '';
+  // We check process.env.API_KEY (standard) AND process.env.EXPO_PUBLIC_API_KEY (automatic in Expo)
+  let apiKey = '';
+  
+  if (typeof process !== 'undefined' && process.env) {
+      apiKey = process.env.API_KEY || process.env.EXPO_PUBLIC_API_KEY || '';
+  }
     
-  return new GoogleGenAI({ apiKey: apiKey || '' });
+  return new GoogleGenAI({ apiKey: apiKey });
 };
 
 // React Native doesn't support crypto.randomUUID out of the box without polyfills.

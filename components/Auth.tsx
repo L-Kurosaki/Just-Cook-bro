@@ -40,13 +40,17 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
       if (data?.user && data?.session) {
         onAuthSuccess(data.user);
       } else if (!isLogin && data?.user && !data?.session) {
-        setError("Success! Please check your email to confirm.");
+        setError("Success! Please check your email to confirm before logging in.");
         // Optional: switch back to login
         setIsLogin(true);
       }
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "Authentication failed");
+      let msg = err.message || "Authentication failed";
+      if (msg.includes("Invalid login")) {
+          msg = "Invalid credentials. If you just signed up, please check your email to confirm your account.";
+      }
+      setError(msg);
     } finally {
       setLoading(false);
     }
