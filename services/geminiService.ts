@@ -1,8 +1,11 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Recipe, Step, StoreLocation } from "../types";
 
-// Initialize Gemini Client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Initialize Gemini Client Lazily
+// This prevents top-level crashes if process.env is undefined in some web contexts
+const getAi = () => {
+  return new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+};
 
 // React Native doesn't support crypto.randomUUID out of the box without polyfills.
 const generateId = () => {
@@ -35,6 +38,7 @@ const formatDietaryContext = (allergies: string[] = [], diets: string[] = []) =>
  */
 export const parseRecipeFromText = async (text: string, allergies: string[] = [], diets: string[] = []): Promise<Recipe> => {
   const model = "gemini-3-flash-preview";
+  const ai = getAi();
   
   const dietaryPrompt = formatDietaryContext(allergies, diets);
 
@@ -119,6 +123,7 @@ export const parseRecipeFromText = async (text: string, allergies: string[] = []
  */
 export const extractRecipeFromUrl = async (url: string, allergies: string[] = [], diets: string[] = []): Promise<Recipe> => {
     const model = "gemini-3-flash-preview";
+    const ai = getAi();
     const dietaryPrompt = formatDietaryContext(allergies, diets);
 
     const prompt = `
@@ -203,6 +208,7 @@ export const extractRecipeFromUrl = async (url: string, allergies: string[] = []
  */
 export const suggestRecipesFromImage = async (base64Image: string, allergies: string[] = [], diets: string[] = []): Promise<Array<{ title: string, description: string }>> => {
     const model = "gemini-3-flash-preview";
+    const ai = getAi();
     const dietaryPrompt = formatDietaryContext(allergies, diets);
 
     const prompt = `
@@ -249,6 +255,7 @@ export const suggestRecipesFromImage = async (base64Image: string, allergies: st
  */
 export const generateFullRecipeFromSuggestion = async (suggestion: { title: string, description: string }, base64Image?: string, allergies: string[] = [], diets: string[] = []): Promise<Recipe> => {
     const model = "gemini-3-flash-preview";
+    const ai = getAi();
     const dietaryPrompt = formatDietaryContext(allergies, diets);
 
     const prompt = `
@@ -322,6 +329,7 @@ export const generateFullRecipeFromSuggestion = async (suggestion: { title: stri
  */
 export const generateRecipeFromVideoFrames = async (frames: string[], allergies: string[] = [], diets: string[] = []): Promise<Recipe> => {
   const model = "gemini-3-pro-preview"; 
+  const ai = getAi();
   
   const dietaryPrompt = formatDietaryContext(allergies, diets);
 
@@ -411,6 +419,7 @@ export const generateRecipeFromVideoFrames = async (frames: string[], allergies:
  */
 export const extractTextFromImage = async (base64Image: string, type: 'ingredients' | 'steps'): Promise<string> => {
   const model = "gemini-3-flash-preview";
+  const ai = getAi();
   const prompt = type === 'ingredients' 
     ? "Extract food ingredients list. One per line."
     : "Extract cooking steps. Numbered list.";
@@ -429,6 +438,7 @@ export const extractTextFromImage = async (base64Image: string, type: 'ingredien
 
 export const getCookingHelp = async (stepInstruction: string, context: string): Promise<string> => {
   const model = "gemini-3-flash-preview";
+  const ai = getAi();
   const response = await ai.models.generateContent({
     model,
     contents: `Step: "${stepInstruction}". Context: "${context}". Give a very short, funny, or encouraging tip. Max 20 words.`,
@@ -438,6 +448,7 @@ export const getCookingHelp = async (stepInstruction: string, context: string): 
 
 export const findGroceryStores = async (ingredient: string, latitude: number, longitude: number): Promise<StoreLocation[]> => {
   const model = "gemini-2.5-flash"; 
+  const ai = getAi();
   const response = await ai.models.generateContent({
     model,
     contents: `Find 3 closest grocery stores near lat:${latitude}, long:${longitude} that likely sell ${ingredient}.`,
