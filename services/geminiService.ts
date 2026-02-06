@@ -127,9 +127,11 @@ export const parseRecipeFromText = async (text: string, allergies: string[] = []
 /**
  * Analyzes a URL (YouTube, Blog, etc.) using Google Search grounding.
  * Adds strict attribution extraction.
+ * Uses gemini-2.5-flash for reliability with Google Search tools.
  */
 export const extractRecipeFromUrl = async (url: string, allergies: string[] = [], diets: string[] = []): Promise<Recipe> => {
-    const model = "gemini-3-flash-preview";
+    // Switch to gemini-2.5-flash for stable tool usage
+    const model = "gemini-2.5-flash";
     const ai = getAi();
     const dietaryPrompt = formatDietaryContext(allergies, diets);
 
@@ -145,114 +147,124 @@ export const extractRecipeFromUrl = async (url: string, allergies: string[] = []
       ${dietaryPrompt}
     `;
 
-    const response = await ai.models.generateContent({
-        model,
-        contents: prompt,
-        config: {
-            tools: [{ googleSearch: {} }],
-            responseMimeType: "application/json",
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    title: { type: Type.STRING },
-                    description: { type: Type.STRING },
-                    prepTime: { type: Type.STRING },
-                    cookTime: { type: Type.STRING },
-                    servings: { type: Type.NUMBER },
-                    originalAuthor: { type: Type.STRING, description: "The name of the person who created the recipe" },
-                    originalSource: { type: Type.STRING, description: "The platform (e.g. YouTube, TikTok)" },
-                    socialHandle: { type: Type.STRING, description: "Their @handle or channel name" },
-                    ingredients: {
-                        type: Type.ARRAY,
-                        items: {
-                            type: Type.OBJECT,
-                            properties: {
-                                name: { type: Type.STRING },
-                                amount: { type: Type.STRING },
-                                category: { type: Type.STRING },
+    try {
+        const response = await ai.models.generateContent({
+            model,
+            contents: prompt,
+            config: {
+                tools: [{ googleSearch: {} }],
+                responseMimeType: "application/json",
+                // Note: responseSchema is officially supported on gemini-1.5-pro/flash and newer, but sometimes 2.5-flash prefers stricter prompting without schema enforced via config if tools are active.
+                // However, let's keep it. If it fails, the catch block will trigger.
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        title: { type: Type.STRING },
+                        description: { type: Type.STRING },
+                        prepTime: { type: Type.STRING },
+                        cookTime: { type: Type.STRING },
+                        servings: { type: Type.NUMBER },
+                        originalAuthor: { type: Type.STRING, description: "The name of the person who created the recipe" },
+                        originalSource: { type: Type.STRING, description: "The platform (e.g. YouTube, TikTok)" },
+                        socialHandle: { type: Type.STRING, description: "Their @handle or channel name" },
+                        ingredients: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    name: { type: Type.STRING },
+                                    amount: { type: Type.STRING },
+                                    category: { type: Type.STRING },
+                                },
                             },
                         },
-                    },
-                    steps: {
-                        type: Type.ARRAY,
-                        items: {
-                            type: Type.OBJECT,
-                            properties: {
-                                instruction: { type: Type.STRING },
-                                timeInSeconds: { type: Type.NUMBER },
-                                tip: { type: Type.STRING },
-                                warning: { type: Type.STRING },
-                                actionVerb: { type: Type.STRING },
+                        steps: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    instruction: { type: Type.STRING },
+                                    timeInSeconds: { type: Type.NUMBER },
+                                    tip: { type: Type.STRING },
+                                    warning: { type: Type.STRING },
+                                    actionVerb: { type: Type.STRING },
+                                },
                             },
                         },
+                        musicMood: { type: Type.STRING },
+                        dietaryTags: { type: Type.ARRAY, items: { type: Type.STRING } },
+                        allergens: { type: Type.ARRAY, items: { type: Type.STRING } },
                     },
-                    musicMood: { type: Type.STRING },
-                    dietaryTags: { type: Type.ARRAY, items: { type: Type.STRING } },
-                    allergens: { type: Type.ARRAY, items: { type: Type.STRING } },
+                    required: ["title", "ingredients", "steps"],
                 },
-                required: ["title", "ingredients", "steps"],
-            },
-        }
-    });
+            }
+        });
 
-    const rawRecipe = JSON.parse(response.text || "{}");
+        if (!response.text) throw new Error("Empty response from AI");
+        const rawRecipe = JSON.parse(response.text);
 
-    return {
-        ...rawRecipe,
-        id: generateId(),
-        imageUrl: "https://picsum.photos/800/600",
-        sourceUrl: url,
-        isPremium: false,
-        author: "Web Import",
-        reviews: [],
-        isPublic: false,
-        isOffline: false
-    };
+        return {
+            ...rawRecipe,
+            id: generateId(),
+            imageUrl: "https://picsum.photos/800/600",
+            sourceUrl: url,
+            isPremium: false,
+            author: "Web Import",
+            reviews: [],
+            isPublic: false,
+            isOffline: false
+        };
+    } catch (e: any) {
+        console.error("Gemini URL Extraction Error:", e);
+        throw new Error("Could not extract recipe from link. The AI might be blocked from this site or the URL is invalid.");
+    }
 };
 
 /**
  * Suggests 6 recipes based on the image.
+ * Uses gemini-2.5-flash for stable vision + search capabilities.
  */
 export const suggestRecipesFromImage = async (base64Image: string, allergies: string[] = [], diets: string[] = []): Promise<Array<{ title: string, description: string }>> => {
-    const model = "gemini-3-flash-preview";
+    const model = "gemini-2.5-flash";
     const ai = getAi();
     const dietaryPrompt = formatDietaryContext(allergies, diets);
 
     const prompt = `
       Analyze this image of food.
-      Search for 6 distinct, accurate recipes.
+      Search for 6 distinct, accurate recipes that match this image.
       ${dietaryPrompt}
       Return title and description.
     `;
 
-    const response = await ai.models.generateContent({
-        model,
-        contents: {
-            parts: [
-                { inlineData: { mimeType: "image/jpeg", data: base64Image } },
-                { text: prompt }
-            ]
-        },
-        config: {
-            tools: [{ googleSearch: {} }],
-            responseMimeType: "application/json",
-            responseSchema: {
-                type: Type.ARRAY,
-                items: {
-                    type: Type.OBJECT,
-                    properties: {
-                        title: { type: Type.STRING },
-                        description: { type: Type.STRING }
-                    },
-                    required: ["title", "description"]
+    try {
+        const response = await ai.models.generateContent({
+            model,
+            contents: {
+                parts: [
+                    { inlineData: { mimeType: "image/jpeg", data: base64Image } },
+                    { text: prompt }
+                ]
+            },
+            config: {
+                tools: [{ googleSearch: {} }],
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            title: { type: Type.STRING },
+                            description: { type: Type.STRING }
+                        },
+                        required: ["title", "description"]
+                    }
                 }
             }
-        }
-    });
+        });
 
-    try {
         return JSON.parse(response.text || "[]");
     } catch (e) {
+        console.error("Gemini Vision Error:", e);
         return [];
     }
 };
@@ -261,7 +273,7 @@ export const suggestRecipesFromImage = async (base64Image: string, allergies: st
  * Step 2 of Image Gen.
  */
 export const generateFullRecipeFromSuggestion = async (suggestion: { title: string, description: string }, base64Image?: string, allergies: string[] = [], diets: string[] = []): Promise<Recipe> => {
-    const model = "gemini-3-flash-preview";
+    const model = "gemini-3-flash-preview"; // We can stick to 3-flash for text generation as it's great
     const ai = getAi();
     const dietaryPrompt = formatDietaryContext(allergies, diets);
 

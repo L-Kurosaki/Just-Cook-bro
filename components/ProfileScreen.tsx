@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, Share, Image } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, TextInput, Share, Image, Alert, Platform } from 'react-native';
 import { UserProfile } from '../types';
-import { Crown, LogOut, Music, Share2, ChevronRight } from 'lucide-react-native';
+import { Crown, LogOut, Music, Share2, ChevronRight, Camera } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
 import Paywall from './Paywall';
 
 interface ProfileScreenProps {
@@ -16,15 +17,39 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ userProfile, setPremium, 
     const [editMode, setEditMode] = useState(false);
     const [dietary, setDietary] = useState(userProfile.dietaryPreferences.join(', '));
     const [allergies, setAllergies] = useState(userProfile.allergies.join(', '));
+    const [name, setName] = useState(userProfile.name);
     const [showMusicHistory, setShowMusicHistory] = useState(false);
 
     const handleSaveProfile = () => {
         onUpdateProfile({
             ...userProfile,
+            name: name,
             dietaryPreferences: dietary.split(',').map(s => s.trim()).filter(s => s),
             allergies: allergies.split(',').map(s => s.trim()).filter(s => s)
         });
         setEditMode(false);
+    };
+
+    const handlePickAvatar = async () => {
+        try {
+            let result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.5,
+                base64: true,
+            });
+
+            if (!result.canceled && result.assets[0].base64) {
+                const base64Img = `data:image/jpeg;base64,${result.assets[0].base64}`;
+                onUpdateProfile({
+                    ...userProfile,
+                    avatarUrl: base64Img
+                });
+            }
+        } catch (e) {
+            Alert.alert("Error", "Could not upload image");
+        }
     };
 
     const handleShareMusic = async () => {
@@ -46,11 +71,30 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ userProfile, setPremium, 
             <Text className="text-2xl font-bold text-dark mb-6">Profile</Text>
             
             <View className="bg-secondary p-6 rounded-2xl flex-row items-center gap-4 mb-6">
-                <View className="w-16 h-16 bg-gold rounded-full items-center justify-center shadow-lg">
-                    <Text className="text-white text-xl font-bold">{(userProfile.name || "C").charAt(0).toUpperCase()}</Text>
-                </View>
-                <View>
-                    <Text className="font-bold text-lg text-dark">{userProfile.name}</Text>
+                <TouchableOpacity onPress={handlePickAvatar} className="relative">
+                    {userProfile.avatarUrl ? (
+                         <Image source={{ uri: userProfile.avatarUrl }} className="w-16 h-16 rounded-full" />
+                    ) : (
+                        <View className="w-16 h-16 bg-gold rounded-full items-center justify-center shadow-lg">
+                            <Text className="text-white text-xl font-bold">{(userProfile.name || "C").charAt(0).toUpperCase()}</Text>
+                        </View>
+                    )}
+                    <View className="absolute bottom-0 right-0 bg-dark p-1 rounded-full border border-white">
+                        <Camera size={10} stroke="white" />
+                    </View>
+                </TouchableOpacity>
+
+                <View className="flex-1">
+                    {editMode ? (
+                        <TextInput 
+                            value={name} 
+                            onChangeText={setName} 
+                            className="font-bold text-lg text-dark border-b border-gold mb-1" 
+                        />
+                    ) : (
+                        <Text className="font-bold text-lg text-dark">{userProfile.name}</Text>
+                    )}
+                    
                     <View className="flex-row items-center gap-1 mt-1">
                         {userProfile.isPremium ? (
                             <View className="bg-dark px-2 py-0.5 rounded-full flex-row items-center gap-1">

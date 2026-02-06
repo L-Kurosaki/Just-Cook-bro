@@ -192,7 +192,6 @@ export const storageService = {
   },
 
   saveCommunityRecipe: async (recipe: Recipe, myUserId?: string) => {
-     // When "saving" a community recipe, we fork it into the user's cookbook
      return { 
          ...recipe, 
          id: crypto.randomUUID(), 
@@ -200,17 +199,22 @@ export const storageService = {
          sourceUrl: `Community: ${recipe.author}`,
          originalAuthor: recipe.originalAuthor || recipe.author,
          originalSource: 'Just Cook Bro Community',
-         userCollections: [], // Reset collections
-         reviews: [] // Reset reviews on the personal copy
+         userCollections: [], 
+         reviews: [] 
      };
   },
 
   // --- PROFILES ---
 
   saveProfile: async (profile: UserProfile, userId?: string) => {
+    // Save to local first for speed
     await setLocal(PROFILE_KEY, profile);
     
     if (isSupabaseConfigured() && userId) {
+        // Prepare the payload. 
+        // Note: 'avatarUrl' and 'name' are part of the JSON blob or separate columns depending on schema.
+        // For this implementation, we assume we update the 'full_name' in auth metadata separately if possible,
+        // or just store everything in the profiles table.
         await supabase.from('profiles').upsert({
             id: userId,
             is_premium: profile.isPremium,
@@ -219,34 +223,40 @@ export const storageService = {
             is_delete_locked: profile.isDeleteLocked,
             music_history: profile.musicHistory,
             custom_collections: profile.customCollections,
-            // Assuming the schema has columns for phone/metadata, or we store it in a generic field
-            // But usually we rely on auth.users for phone/email, and this table for app specifics
-            // If you added phone to public.profiles, include it here:
-            // phone_number: profile.phoneNumber
+            // Storing avatar in the profile row for simplicity
+            avatar_url: profile.avatarUrl 
+        });
+
+        // Also update Auth Metadata for consistency across sessions
+        await supabase.auth.updateUser({
+            data: { full_name: profile.name, phone: profile.phoneNumber }
         });
     }
   },
 
   getProfile: async (userId?: string): Promise<UserProfile | null> => {
     if (isSupabaseConfigured() && userId) {
-        // Fetch from profile table
         const { data: profileData, error: profileError } = await supabase
             .from('profiles')
             .select('*')
             .eq('id', userId)
             .single();
         
-        // Fetch metadata from auth user to get name/phone if profile is empty or to sync
+        // Fetch metadata from auth user
         const { data: { user } } = await supabase.auth.getUser();
         
         const metaName = user?.user_metadata?.full_name;
         const metaPhone = user?.user_metadata?.phone;
 
         if (!profileError && profileData) {
+            // Priority: Profile DB Name -> Auth Meta Name -> Email -> "Chef"
+            const finalName = profileData.full_name || metaName || user?.email?.split('@')[0] || "Chef";
+            
             return {
-                name: metaName || profileData.email || "Chef",
-                email: profileData.email,
+                name: finalName,
+                email: user?.email,
                 phoneNumber: metaPhone,
+                avatarUrl: profileData.avatar_url, // Get avatar
                 isPremium: profileData.is_premium,
                 dietaryPreferences: profileData.dietary_preferences || [],
                 allergies: profileData.allergies || [],
@@ -255,11 +265,11 @@ export const storageService = {
                 customCollections: profileData.custom_collections || []
             };
         } else if (user) {
-            // New user, no profile row yet
              return {
                 name: metaName || "Chef",
                 phoneNumber: metaPhone,
                 email: user.email,
+                avatarUrl: undefined,
                 isPremium: false,
                 dietaryPreferences: [],
                 allergies: [],

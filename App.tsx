@@ -96,54 +96,61 @@ const DiscoverScreen = ({ navigation }: any) => {
   const [statusMessage, setStatusMessage] = useState("");
 
   const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      base64: true, // Only guaranteed on Native
-      quality: 0.5,
-    });
+    try {
+        let result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          base64: true, // Only guaranteed on Native
+          quality: 0.5,
+        });
 
-    if (!result.canceled) {
-      setLoading(true);
-      setStatusMessage("Analyzing Food...");
-      
-      try {
-          // On Web, ImagePicker often returns a blob URI, not base64. We must convert it.
-          let base64Data = result.assets[0].base64;
+        if (!result.canceled) {
+          setLoading(true);
+          setStatusMessage("Analyzing Food...");
           
-          if (!base64Data && Platform.OS === 'web') {
-              const response = await fetch(result.assets[0].uri);
-              const blob = await response.blob();
-              base64Data = await new Promise((resolve, reject) => {
-                  const reader = new FileReader();
-                  reader.onloadend = () => {
-                      const base64String = reader.result as string;
-                      // Remove data url prefix (e.g. "data:image/jpeg;base64,")
-                      resolve(base64String.split(',')[1]); 
-                  };
-                  reader.onerror = reject;
-                  reader.readAsDataURL(blob);
-              });
-          }
-
-          if (base64Data) {
-              const suggestions = await suggestRecipesFromImage(base64Data);
-              if(suggestions.length > 0) {
-                  setStatusMessage("Writing Recipe...");
-                  const recipe = await generateFullRecipeFromSuggestion(suggestions[0], base64Data);
-                  
-                  const { data: { user } } = await supabase.auth.getUser();
-                  await storageService.addRecipe(recipe, user?.id);
-                  
-                  setLoading(false);
-                  navigation.navigate('Home');
-              } else {
-                  throw new Error("No recipes found in image.");
+          try {
+              // On Web, ImagePicker often returns a blob URI, not base64. We must convert it.
+              let base64Data = result.assets[0].base64;
+              
+              if (!base64Data && Platform.OS === 'web') {
+                  const response = await fetch(result.assets[0].uri);
+                  const blob = await response.blob();
+                  base64Data = await new Promise((resolve, reject) => {
+                      const reader = new FileReader();
+                      reader.onloadend = () => {
+                          const base64String = reader.result as string;
+                          // Remove data url prefix (e.g. "data:image/jpeg;base64,")
+                          resolve(base64String.split(',')[1]); 
+                      };
+                      reader.onerror = reject;
+                      reader.readAsDataURL(blob);
+                  });
               }
+
+              if (base64Data) {
+                  const suggestions = await suggestRecipesFromImage(base64Data);
+                  
+                  if (suggestions && suggestions.length > 0) {
+                      setStatusMessage("Writing Recipe...");
+                      const recipe = await generateFullRecipeFromSuggestion(suggestions[0], base64Data);
+                      
+                      const { data: { user } } = await supabase.auth.getUser();
+                      await storageService.addRecipe(recipe, user?.id);
+                      
+                      setLoading(false);
+                      navigation.navigate('Home');
+                  } else {
+                      setLoading(false);
+                      Alert.alert("Analysis Failed", "Could not identify any clear food items in the image.");
+                  }
+              }
+          } catch (e: any) {
+              setLoading(false);
+              Alert.alert("Scan Error", e.message || "An error occurred while analyzing the image.");
           }
-      } catch (e: any) {
-          Alert.alert("Scan Failed", e.message || "Could not analyze image. Try a clearer photo.");
-          setLoading(false);
-      }
+        }
+    } catch (e) {
+        setLoading(false);
+        // Silent catch for picker cancellation or permission denial
     }
   };
 
@@ -160,8 +167,8 @@ const DiscoverScreen = ({ navigation }: any) => {
           navigation.navigate('Home');
       } catch(e: any) {
           console.error(e);
-          Alert.alert("Import Failed", "Could not extract recipe. This might be due to the website blocking access. Try pasting the text directly if possible.");
           setLoading(false);
+          Alert.alert("Link Error", e.message || "Could not extract recipe. Ensure the link is valid and publicly accessible.");
       }
   };
 

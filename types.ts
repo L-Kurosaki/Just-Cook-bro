@@ -95,6 +95,7 @@ export interface UserProfile {
   email?: string;
   name: string;
   phoneNumber?: string;
+  avatarUrl?: string; // New field for profile picture
   dietaryPreferences: string[];
   allergies: string[];
   isPremium: boolean;
