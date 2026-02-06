@@ -1,10 +1,10 @@
+import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState } from 'react-native';
 
-// TODO: REPLACE THESE WITH YOUR ACTUAL SUPABASE KEYS
-// You can get these from your Supabase Dashboard -> Project Settings -> API
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://xyzcompany.supabase.co';
-const SUPABASE_ANON_KEY = process.env.SUPABASE_KEY || 'public-anon-key';
+const SUPABASE_URL = 'https://ltkfrfsowjgrdnqzewah.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable__az6oGl_6xdsQVNvNA5jaA_C47RrnUg';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
@@ -15,6 +15,15 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   },
 });
 
+// Tells Supabase to auto-refresh the token when the app comes to foreground
+AppState.addEventListener('change', (state) => {
+  if (state === 'active') {
+    supabase.auth.startAutoRefresh();
+  } else {
+    supabase.auth.stopAutoRefresh();
+  }
+});
+
 export const isSupabaseConfigured = () => {
-  return SUPABASE_URL !== 'https://xyzcompany.supabase.co';
+  return true;
 };

@@ -46,7 +46,7 @@ const ShoppingListScreen = () => {
         <SafeAreaView className="flex-1 bg-white">
             <View className="flex-row items-center p-4 border-b border-secondary">
                 <TouchableOpacity onPress={() => navigation.goBack()} className="p-2">
-                    <ArrowLeft size={24} color="#2E2E2E" />
+                    <ArrowLeft size={24} stroke="#2E2E2E" />
                 </TouchableOpacity>
                 <Text className="text-xl font-bold text-dark ml-2">Shopping List</Text>
                 <View className="flex-1" />
@@ -67,7 +67,7 @@ const ShoppingListScreen = () => {
                             onPress={() => toggleItem(item.id)}
                             className="flex-row items-center bg-secondary/30 p-4 rounded-xl mb-2"
                         >
-                            {item.done ? <CheckSquare size={20} color="#C9A24D" /> : <Square size={20} color="#6B6B6B" />}
+                            {item.done ? <CheckSquare size={20} stroke="#C9A24D" /> : <Square size={20} stroke="#6B6B6B" />}
                             <Text className={`ml-3 text-base flex-1 ${item.done ? 'text-midGrey line-through' : 'text-dark'}`}>
                                 {item.text}
                             </Text>
@@ -86,7 +86,7 @@ const ShoppingListScreen = () => {
                         onSubmitEditing={addItem}
                     />
                     <TouchableOpacity onPress={addItem} className="bg-gold p-3 rounded-xl items-center justify-center">
-                        <Plus size={24} color="white" />
+                        <Plus size={24} stroke="white" />
                     </TouchableOpacity>
                 </View>
             </View>

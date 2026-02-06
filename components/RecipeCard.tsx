@@ -37,7 +37,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, userProfile }) => {
           )}
           {hasAllergy && (
              <View className="absolute bottom-2 right-2 bg-red-600 px-2 py-1 rounded-full flex-row items-center gap-1">
-              <AlertTriangle size={10} color="white" /> 
+              <AlertTriangle size={10} stroke="white" /> 
               <Text className="text-white text-[10px] font-bold">ALLERGY</Text>
             </View>
           )}
@@ -45,18 +45,18 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, userProfile }) => {
         <View className="p-4">
           <View className="flex-row justify-between items-start mb-1">
              <Text className="font-bold text-dark text-lg flex-1 mr-2" numberOfLines={1}>{recipe.title}</Text>
-             {recipe.isPublic ? <Globe size={14} color="#6B6B6B" /> : <Lock size={14} color="#6B6B6B" />}
+             {recipe.isPublic ? <Globe size={14} stroke="#6B6B6B" /> : <Lock size={14} stroke="#6B6B6B" />}
           </View>
           
           <Text className="text-midGrey text-xs mb-3" numberOfLines={2}>{recipe.description}</Text>
           
           <View className="flex-row items-center gap-4">
             <View className="flex-row items-center gap-1">
-              <Clock size={14} color="#6B6B6B" />
+              <Clock size={14} stroke="#6B6B6B" />
               <Text className="text-midGrey text-xs font-medium">{recipe.prepTime}</Text>
             </View>
              <View className="flex-row items-center gap-1">
-              <Users size={14} color="#6B6B6B" />
+              <Users size={14} stroke="#6B6B6B" />
               <Text className="text-midGrey text-xs font-medium">{recipe.servings} pp</Text>
             </View>
           </View>
