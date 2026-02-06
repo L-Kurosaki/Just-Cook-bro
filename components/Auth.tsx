@@ -41,14 +41,14 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
         onAuthSuccess(data.user);
       } else if (!isLogin && data?.user && !data?.session) {
         setError("Success! Please check your email to confirm before logging in.");
-        // Optional: switch back to login
+        // Switch back to login to encourage them to sign in after confirming
         setIsLogin(true);
       }
     } catch (err: any) {
       console.error(err);
       let msg = err.message || "Authentication failed";
       if (msg.includes("Invalid login")) {
-          msg = "Invalid credentials. If you just signed up, please check your email to confirm your account.";
+          msg = "Invalid credentials. If you just signed up, did you confirm your email address?";
       }
       setError(msg);
     } finally {
