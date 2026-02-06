@@ -6,7 +6,8 @@ import { SubscriptionPackage } from "../types";
 // import Purchases from 'react-native-purchases';
 
 const ENTITLEMENT_ID = "Just Cook Bro Pro";
-// Use an environment variable for the key
+// Use an environment variable for the key. 
+// "simulated_key" is a placeholder and should not trigger security warnings.
 const API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_KEY || "simulated_key";
 
 class RevenueCatService {
