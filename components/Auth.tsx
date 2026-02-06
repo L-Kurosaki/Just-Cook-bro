@@ -31,7 +31,6 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
           result = await auth.signInWithPassword({ email, password });
       } else {
           // For web, explicitly setting the redirect helps ensure Supabase knows where to return.
-          // This can sometimes resolve email sending errors if the project URL isn't configured perfectly.
           const redirectTo = Platform.select({
               web: typeof window !== 'undefined' ? window.location.origin : undefined,
               default: undefined
@@ -63,9 +62,12 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
       
       // Detailed handling for common Supabase configuration issues
       if (msg.includes("Invalid login")) {
-          msg = "Invalid credentials. If you just signed up, did you confirm your email address?";
+          msg = "Invalid credentials. If you just signed up, did you confirm your email address in Supabase?";
+      } else if (msg.includes("User already registered")) {
+          msg = "This email is already registered. Please Sign In.";
+          setIsLogin(true); // Auto-switch to login to be helpful
       } else if (msg.includes("Error sending confirmation email")) {
-          msg = "System could not send the verification email. This usually means the project's email rate limit is reached or SMTP is unconfigured. \n\nAdmin Fix: Go to Supabase > Authentication > Providers > Email > Disable 'Confirm email'.";
+          msg = "Supabase Email Error. Fix: Go to Authentication > Providers > Email > Disable 'Confirm email'.";
       }
       
       setError(msg);
