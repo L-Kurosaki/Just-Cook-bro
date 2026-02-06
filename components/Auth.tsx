@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { supabase } from '../services/supabaseClient';
 import { LogIn, UserPlus, ChefHat } from 'lucide-react-native';
 
@@ -30,7 +30,20 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
       if (isLogin) {
           result = await auth.signInWithPassword({ email, password });
       } else {
-          result = await auth.signUp({ email, password });
+          // For web, explicitly setting the redirect helps ensure Supabase knows where to return.
+          // This can sometimes resolve email sending errors if the project URL isn't configured perfectly.
+          const redirectTo = Platform.select({
+              web: typeof window !== 'undefined' ? window.location.origin : undefined,
+              default: undefined
+          });
+
+          result = await auth.signUp({ 
+              email, 
+              password,
+              options: {
+                  emailRedirectTo: redirectTo
+              }
+          });
       }
 
       const { data, error } = result;
@@ -47,9 +60,14 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
     } catch (err: any) {
       console.error(err);
       let msg = err.message || "Authentication failed";
+      
+      // Detailed handling for common Supabase configuration issues
       if (msg.includes("Invalid login")) {
           msg = "Invalid credentials. If you just signed up, did you confirm your email address?";
+      } else if (msg.includes("Error sending confirmation email")) {
+          msg = "System could not send the verification email. This usually means the project's email rate limit is reached or SMTP is unconfigured. \n\nAdmin Fix: Go to Supabase > Authentication > Providers > Email > Disable 'Confirm email'.";
       }
+      
       setError(msg);
     } finally {
       setLoading(false);
