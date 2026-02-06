@@ -10,6 +10,10 @@ const getAi = () => {
   if (typeof process !== 'undefined' && process.env) {
       apiKey = process.env.API_KEY || process.env.EXPO_PUBLIC_API_KEY || '';
   }
+  
+  if (!apiKey) {
+      throw new Error("Missing API Key. Please check your .env or environment configuration.");
+  }
     
   return new GoogleGenAI({ apiKey: apiKey });
 };
@@ -35,16 +39,15 @@ const formatDietaryContext = (allergies: string[] = [], diets: string[] = []) =>
     2. If it does, YOU MUST SUBSTITUTE them with valid alternatives that fit the diet (e.g., use almond milk for dairy, gluten-free flour for wheat, tofu/tempeh for meat).
     3. Ensure the substitution maintains the texture and flavor of the dish as closely as possible.
     4. In the 'ingredients' list, explicitly mention the substitution (e.g., "Almond Milk (Dairy-Free subst.)").
-    5. In the 'steps', ensure cooking instructions match the new ingredients (e.g., "cook tofu" instead of "cook chicken").
-    6. If the dish is completely incompatible (e.g., a steak for a vegan), create the closest thematic alternative (e.g., Cauliflower Steak).
+    5. In the 'steps', ensure cooking instructions match the new ingredients.
   `;
 };
 
 /**
- * Parses a recipe from a raw text description or URL content.
+ * Parses a recipe from a raw text description.
  */
 export const parseRecipeFromText = async (text: string, allergies: string[] = [], diets: string[] = []): Promise<Recipe> => {
-  const model = "gemini-3-flash-preview";
+  const model = "gemini-2.5-flash";
   const ai = getAi();
   
   const dietaryPrompt = formatDietaryContext(allergies, diets);
@@ -52,14 +55,8 @@ export const parseRecipeFromText = async (text: string, allergies: string[] = []
   const prompt = `
     You are an expert chef API. 
     Input: "${text}"
-    
     ${dietaryPrompt}
-
-    1. Structure the input into a recipe.
-    2. Identify "actionVerb" for steps (e.g., 'chop', 'boil').
-    3. Identify "originalAuthor" if mentioned in the text (e.g. "Recipe by Grandma", "Courtesy of Chef John").
-    4. Provide specific "warning" for steps where timing is critical.
-    5. Suggest a 'musicMood'.
+    Structure the input into a recipe JSON.
   `;
 
   const response = await ai.models.generateContent({
@@ -75,8 +72,6 @@ export const parseRecipeFromText = async (text: string, allergies: string[] = []
           prepTime: { type: Type.STRING },
           cookTime: { type: Type.STRING },
           servings: { type: Type.NUMBER },
-          originalAuthor: { type: Type.STRING },
-          originalSource: { type: Type.STRING },
           ingredients: {
             type: Type.ARRAY,
             items: {
@@ -97,13 +92,9 @@ export const parseRecipeFromText = async (text: string, allergies: string[] = []
                 timeInSeconds: { type: Type.NUMBER },
                 tip: { type: Type.STRING },
                 warning: { type: Type.STRING },
-                actionVerb: { type: Type.STRING },
               },
             },
           },
-          musicMood: { type: Type.STRING },
-          dietaryTags: { type: Type.ARRAY, items: { type: Type.STRING } },
-          allergens: { type: Type.ARRAY, items: { type: Type.STRING } },
         },
         required: ["title", "ingredients", "steps"],
       },
@@ -120,17 +111,15 @@ export const parseRecipeFromText = async (text: string, allergies: string[] = []
     author: "You",
     reviews: [],
     isPublic: false,
-    isOffline: false
+    isOffline: false,
+    steps: rawRecipe.steps || []
   };
 };
 
 /**
  * Analyzes a URL (YouTube, Blog, etc.) using Google Search grounding.
- * Adds strict attribution extraction.
- * Uses gemini-2.5-flash for reliability with Google Search tools.
  */
 export const extractRecipeFromUrl = async (url: string, allergies: string[] = [], diets: string[] = []): Promise<Recipe> => {
-    // Switch to gemini-2.5-flash for stable tool usage
     const model = "gemini-2.5-flash";
     const ai = getAi();
     const dietaryPrompt = formatDietaryContext(allergies, diets);
@@ -141,7 +130,7 @@ export const extractRecipeFromUrl = async (url: string, allergies: string[] = []
       Tasks:
       1. Visit the URL/Search to find the content.
       2. Extract the recipe details.
-      3. CRITICAL: Identify the Original Creator/Author Name and their Social Handle if available.
+      3. Identify the Original Creator/Author Name and their Social Handle if available.
       4. Format into JSON.
 
       ${dietaryPrompt}
@@ -154,8 +143,6 @@ export const extractRecipeFromUrl = async (url: string, allergies: string[] = []
             config: {
                 tools: [{ googleSearch: {} }],
                 responseMimeType: "application/json",
-                // Note: responseSchema is officially supported on gemini-1.5-pro/flash and newer, but sometimes 2.5-flash prefers stricter prompting without schema enforced via config if tools are active.
-                // However, let's keep it. If it fails, the catch block will trigger.
                 responseSchema: {
                     type: Type.OBJECT,
                     properties: {
@@ -164,9 +151,9 @@ export const extractRecipeFromUrl = async (url: string, allergies: string[] = []
                         prepTime: { type: Type.STRING },
                         cookTime: { type: Type.STRING },
                         servings: { type: Type.NUMBER },
-                        originalAuthor: { type: Type.STRING, description: "The name of the person who created the recipe" },
-                        originalSource: { type: Type.STRING, description: "The platform (e.g. YouTube, TikTok)" },
-                        socialHandle: { type: Type.STRING, description: "Their @handle or channel name" },
+                        originalAuthor: { type: Type.STRING },
+                        originalSource: { type: Type.STRING },
+                        socialHandle: { type: Type.STRING },
                         ingredients: {
                             type: Type.ARRAY,
                             items: {
@@ -174,7 +161,6 @@ export const extractRecipeFromUrl = async (url: string, allergies: string[] = []
                                 properties: {
                                     name: { type: Type.STRING },
                                     amount: { type: Type.STRING },
-                                    category: { type: Type.STRING },
                                 },
                             },
                         },
@@ -187,13 +173,9 @@ export const extractRecipeFromUrl = async (url: string, allergies: string[] = []
                                     timeInSeconds: { type: Type.NUMBER },
                                     tip: { type: Type.STRING },
                                     warning: { type: Type.STRING },
-                                    actionVerb: { type: Type.STRING },
                                 },
                             },
                         },
-                        musicMood: { type: Type.STRING },
-                        dietaryTags: { type: Type.ARRAY, items: { type: Type.STRING } },
-                        allergens: { type: Type.ARRAY, items: { type: Type.STRING } },
                     },
                     required: ["title", "ingredients", "steps"],
                 },
@@ -212,17 +194,17 @@ export const extractRecipeFromUrl = async (url: string, allergies: string[] = []
             author: "Web Import",
             reviews: [],
             isPublic: false,
-            isOffline: false
+            isOffline: false,
+            steps: rawRecipe.steps || []
         };
     } catch (e: any) {
         console.error("Gemini URL Extraction Error:", e);
-        throw new Error("Could not extract recipe from link. The AI might be blocked from this site or the URL is invalid.");
+        throw new Error(`Could not extract recipe: ${e.message}`);
     }
 };
 
 /**
  * Suggests 6 recipes based on the image.
- * Uses gemini-2.5-flash for stable vision + search capabilities.
  */
 export const suggestRecipesFromImage = async (base64Image: string, allergies: string[] = [], diets: string[] = []): Promise<Array<{ title: string, description: string }>> => {
     const model = "gemini-2.5-flash";
@@ -265,7 +247,8 @@ export const suggestRecipesFromImage = async (base64Image: string, allergies: st
         return JSON.parse(response.text || "[]");
     } catch (e) {
         console.error("Gemini Vision Error:", e);
-        return [];
+        // Throwing here ensures the UI knows something went wrong instead of failing silently
+        throw new Error("Failed to analyze image.");
     }
 };
 
@@ -273,7 +256,7 @@ export const suggestRecipesFromImage = async (base64Image: string, allergies: st
  * Step 2 of Image Gen.
  */
 export const generateFullRecipeFromSuggestion = async (suggestion: { title: string, description: string }, base64Image?: string, allergies: string[] = [], diets: string[] = []): Promise<Recipe> => {
-    const model = "gemini-3-flash-preview"; // We can stick to 3-flash for text generation as it's great
+    const model = "gemini-2.5-flash"; // Using 2.5 Flash for speed/reliability
     const ai = getAi();
     const dietaryPrompt = formatDietaryContext(allergies, diets);
 
@@ -316,13 +299,9 @@ export const generateFullRecipeFromSuggestion = async (suggestion: { title: stri
                                 timeInSeconds: { type: Type.NUMBER },
                                 tip: { type: Type.STRING },
                                 warning: { type: Type.STRING },
-                                actionVerb: { type: Type.STRING },
                             },
                         },
                     },
-                    musicMood: { type: Type.STRING },
-                    dietaryTags: { type: Type.ARRAY, items: { type: Type.STRING } },
-                    allergens: { type: Type.ARRAY, items: { type: Type.STRING } },
                 },
                 required: ["title", "ingredients", "steps"],
             },
@@ -339,130 +318,9 @@ export const generateFullRecipeFromSuggestion = async (suggestion: { title: stri
         author: "AI Chef",
         reviews: [],
         isPublic: false,
-        isOffline: false
+        isOffline: false,
+        steps: rawRecipe.steps || []
     };
-};
-
-/**
- * Video Analysis with STRICT Watermark detection for Attribution.
- */
-export const generateRecipeFromVideoFrames = async (frames: string[], allergies: string[] = [], diets: string[] = []): Promise<Recipe> => {
-  const model = "gemini-3-pro-preview"; 
-  const ai = getAi();
-  
-  const dietaryPrompt = formatDietaryContext(allergies, diets);
-
-  const prompt = `
-    Analyze these video frames for a cooking recipe.
-    ${dietaryPrompt}
-
-    TASKS:
-    1. Extract the recipe steps and ingredients.
-    2. **STRICT ATTRIBUTION CHECK**: You MUST look for watermarks, TikTok handles, YouTube channel names, or on-screen text overlays that identify the creator. 
-       - Examples: "@GordonRamsay", "Tasty", "BingingWithBabish".
-       - This is CRITICAL for user safety and credit.
-    3. If a name or handle is found, set "originalAuthor" and "socialHandle".
-    4. If the platform is identifiable (e.g. TikTok logo), set "originalSource".
-  `;
-
-  const parts: any[] = [{ text: prompt }];
-  frames.forEach(base64 => {
-    parts.push({ inlineData: { mimeType: "image/jpeg", data: base64 } });
-  });
-
-  const response = await ai.models.generateContent({
-    model,
-    contents: { parts },
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING },
-          description: { type: Type.STRING },
-          prepTime: { type: Type.STRING },
-          cookTime: { type: Type.STRING },
-          servings: { type: Type.NUMBER },
-          originalAuthor: { type: Type.STRING, description: "Name extracted from watermark/text. Mandatory if visible." },
-          socialHandle: { type: Type.STRING, description: "Handle extracted from watermark/text" },
-          originalSource: { type: Type.STRING },
-          ingredients: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                name: { type: Type.STRING },
-                amount: { type: Type.STRING },
-                category: { type: Type.STRING },
-              },
-            },
-          },
-          steps: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                instruction: { type: Type.STRING },
-                timeInSeconds: { type: Type.NUMBER },
-                tip: { type: Type.STRING },
-                warning: { type: Type.STRING },
-                actionVerb: { type: Type.STRING },
-              },
-            },
-          },
-          musicMood: { type: Type.STRING },
-          dietaryTags: { type: Type.ARRAY, items: { type: Type.STRING } },
-          allergens: { type: Type.ARRAY, items: { type: Type.STRING } },
-        },
-        required: ["title", "ingredients", "steps"],
-      },
-    },
-  });
-
-  const rawRecipe = JSON.parse(response.text || "{}");
-
-  return {
-    ...rawRecipe,
-    id: generateId(),
-    imageUrl: frames.length > 0 ? `data:image/jpeg;base64,${frames[Math.floor(frames.length / 2)]}` : "https://picsum.photos/800/600",
-    isPremium: false,
-    author: "Video AI",
-    reviews: [],
-    isPublic: false,
-    isOffline: false
-  };
-};
-
-/**
- * OCR Legacy
- */
-export const extractTextFromImage = async (base64Image: string, type: 'ingredients' | 'steps'): Promise<string> => {
-  const model = "gemini-3-flash-preview";
-  const ai = getAi();
-  const prompt = type === 'ingredients' 
-    ? "Extract food ingredients list. One per line."
-    : "Extract cooking steps. Numbered list.";
-
-  const response = await ai.models.generateContent({
-    model,
-    contents: {
-      parts: [
-        { inlineData: { mimeType: "image/jpeg", data: base64Image } },
-        { text: prompt },
-      ],
-    },
-  });
-  return response.text || "";
-};
-
-export const getCookingHelp = async (stepInstruction: string, context: string): Promise<string> => {
-  const model = "gemini-3-flash-preview";
-  const ai = getAi();
-  const response = await ai.models.generateContent({
-    model,
-    contents: `Step: "${stepInstruction}". Context: "${context}". Give a very short, funny, or encouraging tip. Max 20 words.`,
-  });
-  return response.text || "You got this!";
 };
 
 export const findGroceryStores = async (ingredient: string, latitude: number, longitude: number): Promise<StoreLocation[]> => {
@@ -488,8 +346,12 @@ export const findGroceryStores = async (ingredient: string, latitude: number, lo
   return Array.from(new Map(stores.map(item => [item.name, item])).values()).slice(0, 3);
 };
 
-export const scanRecipeFromImage = async (base64Image: string, allergies: string[] = [], diets: string[] = []): Promise<Recipe> => {
-   const suggestions = await suggestRecipesFromImage(base64Image, allergies, diets);
-   if (suggestions.length > 0) return generateFullRecipeFromSuggestion(suggestions[0], base64Image, allergies, diets);
-   throw new Error("Could not generate recipe");
+export const getCookingHelp = async (stepInstruction: string, context: string): Promise<string> => {
+  const model = "gemini-2.5-flash";
+  const ai = getAi();
+  const response = await ai.models.generateContent({
+    model,
+    contents: `Step: "${stepInstruction}". Context: "${context}". Give a very short, funny, or encouraging tip. Max 20 words.`,
+  });
+  return response.text || "You got this!";
 };

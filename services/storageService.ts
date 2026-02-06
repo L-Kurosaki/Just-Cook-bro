@@ -207,79 +207,72 @@ export const storageService = {
   // --- PROFILES ---
 
   saveProfile: async (profile: UserProfile, userId?: string) => {
-    // Save to local first for speed
+    // 1. Always save to local first to ensure UI updates immediately
     await setLocal(PROFILE_KEY, profile);
     
     if (isSupabaseConfigured() && userId) {
-        // Prepare the payload. 
-        // Note: 'avatarUrl' and 'name' are part of the JSON blob or separate columns depending on schema.
-        // For this implementation, we assume we update the 'full_name' in auth metadata separately if possible,
-        // or just store everything in the profiles table.
-        await supabase.from('profiles').upsert({
-            id: userId,
-            is_premium: profile.isPremium,
-            dietary_preferences: profile.dietaryPreferences,
-            allergies: profile.allergies,
-            is_delete_locked: profile.isDeleteLocked,
-            music_history: profile.musicHistory,
-            custom_collections: profile.customCollections,
-            // Storing avatar in the profile row for simplicity
-            avatar_url: profile.avatarUrl 
-        });
+        try {
+            // 2. Try to update Auth Metadata for Name/Phone consistency
+            await supabase.auth.updateUser({
+                data: { full_name: profile.name, phone: profile.phoneNumber }
+            });
 
-        // Also update Auth Metadata for consistency across sessions
-        await supabase.auth.updateUser({
-            data: { full_name: profile.name, phone: profile.phoneNumber }
-        });
+            // 3. Try to update Profiles Table
+            // We assume columns exist. If they don't (like avatar_url), Supabase might throw.
+            // We catch this so the app doesn't crash.
+            await supabase.from('profiles').upsert({
+                id: userId,
+                is_premium: profile.isPremium,
+                dietary_preferences: profile.dietaryPreferences,
+                allergies: profile.allergies,
+                is_delete_locked: profile.isDeleteLocked,
+                music_history: profile.musicHistory,
+                custom_collections: profile.customCollections,
+                avatar_url: profile.avatarUrl 
+            });
+        } catch (e) {
+            console.log("Remote profile save failed (possibly missing columns), but local save succeeded.", e);
+        }
     }
   },
 
   getProfile: async (userId?: string): Promise<UserProfile | null> => {
+    // Try to get from Supabase if online
     if (isSupabaseConfigured() && userId) {
-        const { data: profileData, error: profileError } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', userId)
-            .single();
-        
-        // Fetch metadata from auth user
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        const metaName = user?.user_metadata?.full_name;
-        const metaPhone = user?.user_metadata?.phone;
-
-        if (!profileError && profileData) {
-            // Priority: Profile DB Name -> Auth Meta Name -> Email -> "Chef"
-            const finalName = profileData.full_name || metaName || user?.email?.split('@')[0] || "Chef";
+        try {
+            const { data: profileData, error: profileError } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', userId)
+                .single();
             
-            return {
-                name: finalName,
-                email: user?.email,
-                phoneNumber: metaPhone,
-                avatarUrl: profileData.avatar_url, // Get avatar
-                isPremium: profileData.is_premium,
-                dietaryPreferences: profileData.dietary_preferences || [],
-                allergies: profileData.allergies || [],
-                isDeleteLocked: profileData.is_delete_locked || false,
-                musicHistory: profileData.music_history || [],
-                customCollections: profileData.custom_collections || []
-            };
-        } else if (user) {
-             return {
-                name: metaName || "Chef",
-                phoneNumber: metaPhone,
-                email: user.email,
-                avatarUrl: undefined,
-                isPremium: false,
-                dietaryPreferences: [],
-                allergies: [],
-                isDeleteLocked: false,
-                musicHistory: [],
-                customCollections: []
-            };
+            const { data: { user } } = await supabase.auth.getUser();
+            const metaName = user?.user_metadata?.full_name;
+            const metaPhone = user?.user_metadata?.phone;
+
+            if (!profileError && profileData) {
+                // Combine DB profile with Auth Metadata
+                const finalName = profileData.full_name || metaName || user?.email?.split('@')[0] || "Chef";
+                
+                return {
+                    name: finalName,
+                    email: user?.email,
+                    phoneNumber: metaPhone,
+                    avatarUrl: profileData.avatar_url, 
+                    isPremium: profileData.is_premium,
+                    dietaryPreferences: profileData.dietary_preferences || [],
+                    allergies: profileData.allergies || [],
+                    isDeleteLocked: profileData.is_delete_locked || false,
+                    musicHistory: profileData.music_history || [],
+                    customCollections: profileData.custom_collections || []
+                };
+            }
+        } catch(e) {
+            // Ignore fetch errors, fallback to local
         }
     }
 
+    // Fallback to Local Storage
     return await getLocal<UserProfile>(PROFILE_KEY);
   },
 
