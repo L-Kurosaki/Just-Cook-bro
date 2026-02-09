@@ -34,7 +34,7 @@ const ReviewSection: React.FC<ReviewSectionProps> = ({ reviews, onAddReview, can
                <Text className="font-bold text-xs text-dark">{r.userName}</Text>
                <View className="flex-row">
                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} size={12} stroke="#C9A24D" fill={i < r.rating ? "#C9A24D" : "transparent"} />
+                    <Star key={i} size={12} color="#C9A24D" fill={i < r.rating ? "#C9A24D" : "transparent"} />
                  ))}
                </View>
              </View>
@@ -50,7 +50,7 @@ const ReviewSection: React.FC<ReviewSectionProps> = ({ reviews, onAddReview, can
            <View className="flex-row gap-2 mb-3">
              {[1,2,3,4,5].map((s) => (
                 <TouchableOpacity key={s} onPress={() => setRating(s)}>
-                  <Star size={28} stroke={s <= rating ? "#C9A24D" : "#D1D5DB"} fill={s <= rating ? "#C9A24D" : "transparent"} />
+                  <Star size={28} color={s <= rating ? "#C9A24D" : "#D1D5DB"} fill={s <= rating ? "#C9A24D" : "transparent"} />
                 </TouchableOpacity>
              ))}
            </View>
@@ -66,7 +66,7 @@ const ReviewSection: React.FC<ReviewSectionProps> = ({ reviews, onAddReview, can
                 disabled={!rating || !comment} 
                 className={`p-3 rounded-lg ${!rating || !comment ? 'bg-gray-300' : 'bg-gold'}`}
              >
-               <Send size={16} stroke="white" />
+               <Send size={16} color="white" />
              </TouchableOpacity>
            </View>
         </View>

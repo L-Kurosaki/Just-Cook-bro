@@ -7,6 +7,14 @@ const PROFILE_KEY = "jcb_profile";
 const NOTIFICATIONS_KEY = "jcb_notifications";
 const SHOPPING_KEY = "jcb_shopping_list";
 
+// Helper to generate IDs safely in React Native (crypto.randomUUID is not available)
+const generateId = () => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
 // --- Local Storage Helpers ---
 const getLocal = async <T>(key: string): Promise<T | null> => {
   try {
@@ -194,7 +202,7 @@ export const storageService = {
   saveCommunityRecipe: async (recipe: Recipe, myUserId?: string) => {
      return { 
          ...recipe, 
-         id: crypto.randomUUID(), 
+         id: generateId(), 
          isPublic: false, 
          sourceUrl: `Community: ${recipe.author}`,
          originalAuthor: recipe.originalAuthor || recipe.author,

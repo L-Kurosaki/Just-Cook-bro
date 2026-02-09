@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Alert, Linking, Image } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Play, Pause, SkipForward, ArrowLeft, MessageCircle, AlertCircle, Music, Flame, Utensils, AlertTriangle, ListMusic, Plus, Share2, Check } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Recipe, SpotifyTrack } from '../types';
 import { getCookingHelp } from '../services/geminiService';
 import { spotifyService } from '../services/spotifyService';
@@ -16,6 +17,8 @@ interface CookingModeProps {
 const CookingMode: React.FC<CookingModeProps> = ({ recipes, onAddMusicToHistory, onShareToFeed }) => {
   const route = useRoute<any>();
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+  
   const { id } = route.params;
   const recipe = recipes.find(r => r.id === id);
 
@@ -128,9 +131,14 @@ const CookingMode: React.FC<CookingModeProps> = ({ recipes, onAddMusicToHistory,
 
   return (
     <View className={`flex-1 ${timerAlert ? 'bg-red-50' : 'bg-white'}`}>
-      <View className="flex-row items-center justify-between p-4 border-b border-gray-100 mt-10">
+      
+      {/* Header */}
+      <View 
+        className="flex-row items-center justify-between p-4 border-b border-gray-100"
+        style={{ paddingTop: insets.top + 10 }}
+      >
         <TouchableOpacity onPress={() => navigation.goBack()} className="p-2">
-          <ArrowLeft size={24} stroke="#2E2E2E" />
+          <ArrowLeft size={24} color="#2E2E2E" />
         </TouchableOpacity>
         <View className="flex-1 mx-4">
           <View className="h-2 bg-gray-200 rounded-full overflow-hidden">
@@ -139,7 +147,7 @@ const CookingMode: React.FC<CookingModeProps> = ({ recipes, onAddMusicToHistory,
           <Text className="text-xs text-center mt-1 text-midGrey">Step {currentStepIndex + 1} of {recipe.steps.length}</Text>
         </View>
         <TouchableOpacity>
-            <ListMusic size={24} stroke="#6B6B6B" />
+            <ListMusic size={24} color="#6B6B6B" />
         </TouchableOpacity>
       </View>
 
@@ -152,13 +160,13 @@ const CookingMode: React.FC<CookingModeProps> = ({ recipes, onAddMusicToHistory,
                 className="bg-black p-4 rounded-xl flex-row items-center justify-between mb-6"
             >
                 <View className="flex-row items-center gap-3">
-                    <Music size={20} stroke="#1DB954" />
+                    <Music size={20} color="#1DB954" />
                     <View>
                         <Text className="text-xs font-bold text-white">Connect Spotify</Text>
                         <Text className="text-[10px] text-gray-400">Log your cooking jams</Text>
                     </View>
                 </View>
-                <Plus size={16} stroke="gray" />
+                <Plus size={16} color="gray" />
             </TouchableOpacity>
         ) : (
              currentTrack && (
@@ -177,14 +185,14 @@ const CookingMode: React.FC<CookingModeProps> = ({ recipes, onAddMusicToHistory,
 
         <View className="items-center mb-8">
             <View className="w-24 h-24 bg-secondary rounded-full items-center justify-center mb-4">
-                 <Utensils size={40} stroke="#C9A24D" />
+                 <Utensils size={40} color="#C9A24D" />
             </View>
             <Text className="text-2xl font-bold text-dark text-center leading-tight">{currentStep.instruction}</Text>
         </View>
 
         {currentStep.warning && (
           <View className="bg-red-50 p-4 rounded-lg flex-row items-center gap-2 mb-6">
-             <AlertTriangle size={20} stroke="#DC2626" />
+             <AlertTriangle size={20} color="#DC2626" />
              <Text className="text-xs font-bold uppercase text-red-600">{currentStep.warning}</Text>
           </View>
         )}
@@ -208,7 +216,7 @@ const CookingMode: React.FC<CookingModeProps> = ({ recipes, onAddMusicToHistory,
                 onPress={() => { setIsTimerRunning(!isTimerRunning); setTimerAlert(false); }}
                 className="w-16 h-16 rounded-full bg-gold items-center justify-center shadow-lg"
             >
-                {isTimerRunning ? <Pause size={32} stroke="white" /> : <Play size={32} stroke="white" style={{ marginLeft: 4 }} />}
+                {isTimerRunning ? <Pause size={32} color="white" /> : <Play size={32} color="white" style={{ marginLeft: 4 }} />}
             </TouchableOpacity>
           </View>
         )}
@@ -216,7 +224,7 @@ const CookingMode: React.FC<CookingModeProps> = ({ recipes, onAddMusicToHistory,
         {showHelp && (
            <View className="bg-dark p-5 rounded-xl mb-6 border-l-4 border-gold">
              <View className="flex-row items-start gap-3">
-               <MessageCircle size={20} stroke="#C9A24D" />
+               <MessageCircle size={20} color="#C9A24D" />
                <View className="flex-1">
                  <Text className="font-bold text-gold text-xs uppercase mb-1">AI Assistant</Text>
                  <Text className="text-white text-sm leading-relaxed">{isLoadingHelp ? "Thinking..." : helpMessage}</Text>
@@ -233,7 +241,7 @@ const CookingMode: React.FC<CookingModeProps> = ({ recipes, onAddMusicToHistory,
               onPress={handleAskHelp}
               className="flex-1 bg-secondary py-4 rounded-xl flex-row items-center justify-center gap-2"
             >
-              <AlertCircle size={16} stroke="#2E2E2E" />
+              <AlertCircle size={16} color="#2E2E2E" />
               <Text className="text-dark font-bold text-sm">Help?</Text>
             </TouchableOpacity>
          </View>
@@ -244,7 +252,7 @@ const CookingMode: React.FC<CookingModeProps> = ({ recipes, onAddMusicToHistory,
               className="w-full bg-gold py-4 rounded-xl shadow-lg flex-row items-center justify-center gap-2"
             >
               <Text className="text-white text-lg font-bold">Next Step</Text>
-              <SkipForward size={20} stroke="white" />
+              <SkipForward size={20} color="white" />
             </TouchableOpacity>
          ) : (
             <View className="gap-3">
@@ -253,7 +261,7 @@ const CookingMode: React.FC<CookingModeProps> = ({ recipes, onAddMusicToHistory,
                   disabled={isShared}
                   className={`w-full py-4 rounded-xl shadow-lg flex-row items-center justify-center gap-2 ${isShared ? 'bg-green-500' : 'bg-black'}`}
                 >
-                   {isShared ? <Check size={20} stroke="white" /> : <Share2 size={20} stroke="white" />}
+                   {isShared ? <Check size={20} color="white" /> : <Share2 size={20} color="white" />}
                    <Text className="text-white text-lg font-bold">{isShared ? 'Shared!' : 'Share to Feed'}</Text>
                 </TouchableOpacity>
                 

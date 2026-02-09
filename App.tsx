@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, ActivityIndicator, SafeAreaView, Alert, Platform } from 'react-native';
+import { View, ActivityIndicator, Alert, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { Recipe, UserProfile, SpotifyTrack } from './types';
 import { extractRecipeFromUrl, suggestRecipesFromImage, generateFullRecipeFromSuggestion } from './services/geminiService';
@@ -20,7 +21,7 @@ import ProfileScreen from './components/ProfileScreen';
 import CommunityScreen from './components/CommunityScreen';
 import ShoppingListScreen from './components/ShoppingListScreen';
 
-import { Camera, Link as LinkIcon, Home, Globe, Search, Bell, ShoppingCart } from 'lucide-react-native';
+import { Camera, Link as LinkIcon, Home, Globe, Search, Bell, ShoppingCart, WifiOff } from 'lucide-react-native';
 import { ScrollView, Text, TouchableOpacity, TextInput } from 'react-native';
 
 const Tab = createBottomTabNavigator();
@@ -36,10 +37,15 @@ const HomeScreen = ({ navigation }: any) => {
   useEffect(() => {
     const loadData = async () => {
         // Get current user ID for fetching
-        const { data: { user } } = await supabase.auth.getUser();
-        const prof = await storageService.getProfile(user?.id);
+        let userId = undefined;
+        if (isSupabaseConfigured()) {
+            const { data } = await supabase.auth.getUser();
+            userId = data?.user?.id;
+        }
+        
+        const prof = await storageService.getProfile(userId);
         setUserProfile(prof);
-        const data = await storageService.getRecipes(user?.id);
+        const data = await storageService.getRecipes(userId);
         setRecipes(data);
     };
     const unsubscribe = navigation.addListener('focus', loadData);
@@ -47,7 +53,7 @@ const HomeScreen = ({ navigation }: any) => {
   }, [navigation]);
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-white" edges={['top']}>
       <View className="p-6">
         <View className="mb-6 flex-row justify-between items-start">
             <View>
@@ -56,10 +62,10 @@ const HomeScreen = ({ navigation }: any) => {
             </View>
             <View className="flex-row gap-3">
                 <TouchableOpacity onPress={() => navigation.navigate('ShoppingList')}>
-                    <ShoppingCart size={24} stroke="#2E2E2E" />
+                    <ShoppingCart size={24} color="#2E2E2E" />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => navigation.navigate('Notifications')}>
-                    <Bell size={24} stroke="#2E2E2E" />
+                    <Bell size={24} color="#2E2E2E" />
                 </TouchableOpacity>
             </View>
         </View>
@@ -133,8 +139,13 @@ const DiscoverScreen = ({ navigation }: any) => {
                       setStatusMessage("Writing Recipe...");
                       const recipe = await generateFullRecipeFromSuggestion(suggestions[0], base64Data);
                       
-                      const { data: { user } } = await supabase.auth.getUser();
-                      await storageService.addRecipe(recipe, user?.id);
+                      let userId = undefined;
+                      if (isSupabaseConfigured()) {
+                          const { data: { user } } = await supabase.auth.getUser();
+                          userId = user?.id;
+                      }
+
+                      await storageService.addRecipe(recipe, userId);
                       
                       setLoading(false);
                       navigation.navigate('Home');
@@ -160,8 +171,14 @@ const DiscoverScreen = ({ navigation }: any) => {
       setStatusMessage("Reading Website...");
       try {
           const recipe = await extractRecipeFromUrl(inputText);
-          const { data: { user } } = await supabase.auth.getUser();
-          await storageService.addRecipe(recipe, user?.id);
+          
+          let userId = undefined;
+          if (isSupabaseConfigured()) {
+              const { data: { user } } = await supabase.auth.getUser();
+              userId = user?.id;
+          }
+
+          await storageService.addRecipe(recipe, userId);
           
           setLoading(false);
           navigation.navigate('Home');
@@ -175,7 +192,7 @@ const DiscoverScreen = ({ navigation }: any) => {
   if (loading) return <View className="flex-1 justify-center items-center gap-4"><ActivityIndicator size="large" color="#C9A24D" /><Text className="text-dark font-bold text-lg">{statusMessage || "Chef is working..."}</Text></View>;
 
   return (
-    <SafeAreaView className="flex-1 bg-white p-6">
+    <SafeAreaView className="flex-1 bg-white p-6" edges={['top']}>
       <Text className="text-2xl font-bold text-dark mb-6">Add a Recipe</Text>
       
       <View className="flex-row mb-6 bg-secondary p-1 rounded-xl">
@@ -189,13 +206,13 @@ const DiscoverScreen = ({ navigation }: any) => {
 
       {activeMode === 'scan' ? (
           <TouchableOpacity onPress={pickImage} className="bg-secondary p-10 rounded-xl items-center justify-center border-2 border-dashed border-gray-300">
-              <Camera size={40} stroke="#C9A24D" />
+              <Camera size={40} color="#C9A24D" />
               <Text className="font-bold text-dark mt-4">Pick from Gallery</Text>
           </TouchableOpacity>
       ) : (
           <View className="bg-secondary p-6 rounded-xl">
                <View className="flex-row items-center gap-2 mb-4">
-                   <LinkIcon size={20} stroke="#C9A24D" />
+                   <LinkIcon size={20} color="#C9A24D" />
                    <Text className="font-bold text-dark">Paste URL</Text>
                </View>
                <TextInput 
@@ -224,19 +241,24 @@ const TabNavigator = ({ onLogout }: any) => (
             tabBarInactiveTintColor: '#6B6B6B'
         }}
     >
-        <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarIcon: ({color}) => <Home stroke={color} size={24} /> }} />
-        <Tab.Screen name="Discover" component={DiscoverScreen} options={{ tabBarIcon: ({color}) => <Search stroke={color} size={24} /> }} />
-        <Tab.Screen name="Community" component={CommunityScreen} options={{ tabBarIcon: ({color}) => <Globe stroke={color} size={24} /> }} />
+        <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarIcon: ({color}) => <Home color={color} size={24} /> }} />
+        <Tab.Screen name="Discover" component={DiscoverScreen} options={{ tabBarIcon: ({color}) => <Search color={color} size={24} /> }} />
+        <Tab.Screen name="Community" component={CommunityScreen} options={{ tabBarIcon: ({color}) => <Globe color={color} size={24} /> }} />
         <Tab.Screen name="Profile">
              {(props) => {
                  const [profile, setProfile] = useState<UserProfile>({name: "Chef", isPremium: false, dietaryPreferences: [], allergies: [], isDeleteLocked: false, musicHistory: []});
                  
                  useEffect(() => { 
-                    supabase.auth.getUser().then(({data}) => {
-                        if(data.user) {
-                            storageService.getProfile(data.user.id).then(p => p && setProfile(p));
+                    const load = async () => {
+                        let uid = undefined;
+                        if(isSupabaseConfigured()) {
+                            const { data } = await supabase.auth.getUser();
+                            uid = data?.user?.id;
                         }
-                    });
+                        const p = await storageService.getProfile(uid);
+                        if(p) setProfile(p);
+                    };
+                    load();
                  }, []);
                  
                  return (
@@ -245,15 +267,23 @@ const TabNavigator = ({ onLogout }: any) => (
                         setPremium={(v) => { 
                             const p = {...profile, isPremium: v}; 
                             setProfile(p); 
-                            supabase.auth.getUser().then(({data}) => {
-                                if(data.user) storageService.saveProfile(p, data.user.id);
-                            });
+                            if(isSupabaseConfigured()) {
+                                supabase.auth.getUser().then(({data}) => {
+                                    if(data.user) storageService.saveProfile(p, data.user.id);
+                                });
+                            } else {
+                                storageService.saveProfile(p);
+                            }
                         }} 
                         onUpdateProfile={(p) => { 
                             setProfile(p); 
-                            supabase.auth.getUser().then(({data}) => {
-                                if(data.user) storageService.saveProfile(p, data.user.id);
-                            });
+                            if(isSupabaseConfigured()) {
+                                supabase.auth.getUser().then(({data}) => {
+                                    if(data.user) storageService.saveProfile(p, data.user.id);
+                                });
+                            } else {
+                                storageService.saveProfile(p);
+                            }
                         }} 
                         onLogout={onLogout} 
                      />
@@ -273,26 +303,31 @@ const App = () => {
 
   useEffect(() => {
     // 1. Fetch initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session) {
-          fetchUserData(session.user.id);
-      }
-      setIsLoading(false);
-    });
+    if (isSupabaseConfigured()) {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          setSession(session);
+          if (session) {
+              fetchUserData(session.user.id);
+          }
+          setIsLoading(false);
+        });
 
-    // 2. Subscribe to auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session) {
-          fetchUserData(session.user.id);
-      }
-    });
-
-    return () => subscription.unsubscribe();
+        // 2. Subscribe to auth changes
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+          setSession(session);
+          if (session) {
+              fetchUserData(session.user.id);
+          }
+        });
+        return () => subscription.unsubscribe();
+    } else {
+        // Run in local mode
+        fetchUserData(undefined);
+        setIsLoading(false);
+    }
   }, []);
 
-  const fetchUserData = async (userId: string) => {
+  const fetchUserData = async (userId?: string) => {
       const r = await storageService.getRecipes(userId);
       setRecipes(r);
       const p = await storageService.getProfile(userId);
@@ -300,13 +335,17 @@ const App = () => {
   };
 
   const handleLogout = async () => {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-          Alert.alert("Error signing out", error.message);
-      } else {
-          // Session state updates automatically via onAuthStateChange
-          setUserProfile({name: "Chef", isPremium: false, dietaryPreferences: [], allergies: [], isDeleteLocked: false, musicHistory: []});
-          setRecipes([]);
+      if (isSupabaseConfigured()) {
+        const { error } = await supabase.auth.signOut();
+        if (error) Alert.alert("Error signing out", error.message);
+      }
+      // Always reset local state
+      setUserProfile({name: "Chef", isPremium: false, dietaryPreferences: [], allergies: [], isDeleteLocked: false, musicHistory: []});
+      setRecipes([]);
+      // Force reload of local anonymous profile if needed
+      if (!isSupabaseConfigured()) {
+          const p = await storageService.getProfile();
+          if(p) setUserProfile(p);
       }
   };
 
@@ -331,66 +370,78 @@ const App = () => {
   if (isLoading) return <View className="flex-1 justify-center items-center"><ActivityIndicator color="#C9A24D" /></View>;
 
   return (
-    <NavigationContainer>
-        <Stack.Navigator id="RootStack" screenOptions={{ headerShown: false }}>
-            {!session && isSupabaseConfigured() ? (
-                <Stack.Screen name="Auth">
-                    {props => <Auth {...props} onAuthSuccess={() => { /* Handled by auth listener */ }} />}
-                </Stack.Screen>
-            ) : (
-                <>
-                    <Stack.Screen name="Main">
-                        {props => <TabNavigator {...props} onLogout={handleLogout} />}
-                    </Stack.Screen>
-                    
-                    <Stack.Screen name="RecipeDetail">
-                        {props => <RecipeDetailScreen 
-                            {...props} 
-                            recipes={recipes} 
-                            userProfile={userProfile} 
-                            onAddReview={handleAddReview}
-                            onToggleOffline={(id) => { 
-                                const r = recipes.find(x => x.id === id); 
-                                if(r) {
-                                    const updated = {...r, isOffline: !r.isOffline};
-                                    storageService.updateRecipe(updated, session?.user.id);
-                                    setRecipes(prev => prev.map(item => item.id === id ? updated : item));
-                                }
-                            }}
-                            onAssignCollection={(id, col) => { 
-                                const r = recipes.find(x => x.id === id); 
-                                if(r) {
-                                    const cols = r.userCollections || [];
-                                    const newCols = cols.includes(col) ? cols.filter(c => c !== col) : [...cols, col];
-                                    const updated = {...r, userCollections: newCols};
-                                    storageService.updateRecipe(updated, session?.user.id);
-                                    setRecipes(prev => prev.map(item => item.id === id ? updated : item));
-                                }
-                            }}
-                            onSaveRecipe={handleSaveRecipe}
-                            setShowPaywall={() => Alert.alert("Premium Feature")}
-                        />}
-                    </Stack.Screen>
-                    
-                    <Stack.Screen name="Cook">
-                        {props => <CookingMode 
-                            {...props} 
-                            recipes={recipes} 
-                            onAddMusicToHistory={(t) => {
-                                const updatedProfile = {...userProfile, musicHistory: [...(userProfile.musicHistory || []), t]};
-                                setUserProfile(updatedProfile);
-                                storageService.saveProfile(updatedProfile, session?.user.id);
-                            }}
-                            onShareToFeed={() => Alert.alert("Shared!")} 
-                        />}
-                    </Stack.Screen>
-
-                    <Stack.Screen name="Notifications" component={NotificationsScreen} />
-                    <Stack.Screen name="ShoppingList" component={ShoppingListScreen} />
-                </>
+    <SafeAreaProvider>
+        <NavigationContainer>
+            {/* Offline Indicator */}
+            {!isSupabaseConfigured() && (
+                 <SafeAreaView edges={['top']} className="bg-orange-100">
+                     <View className="p-2 items-center flex-row justify-center gap-2">
+                         <WifiOff size={14} color="#C2410C" />
+                         <Text className="text-xs font-bold text-orange-800">Local Mode (No Database Configured)</Text>
+                     </View>
+                 </SafeAreaView>
             )}
-        </Stack.Navigator>
-    </NavigationContainer>
+
+            <Stack.Navigator id="RootStack" screenOptions={{ headerShown: false }}>
+                {!session && isSupabaseConfigured() ? (
+                    <Stack.Screen name="Auth">
+                        {props => <Auth {...props} onAuthSuccess={() => { /* Handled by auth listener */ }} />}
+                    </Stack.Screen>
+                ) : (
+                    <>
+                        <Stack.Screen name="Main">
+                            {props => <TabNavigator {...props} onLogout={handleLogout} />}
+                        </Stack.Screen>
+                        
+                        <Stack.Screen name="RecipeDetail">
+                            {props => <RecipeDetailScreen 
+                                {...props} 
+                                recipes={recipes} 
+                                userProfile={userProfile} 
+                                onAddReview={handleAddReview}
+                                onToggleOffline={(id) => { 
+                                    const r = recipes.find(x => x.id === id); 
+                                    if(r) {
+                                        const updated = {...r, isOffline: !r.isOffline};
+                                        storageService.updateRecipe(updated, session?.user.id);
+                                        setRecipes(prev => prev.map(item => item.id === id ? updated : item));
+                                    }
+                                }}
+                                onAssignCollection={(id, col) => { 
+                                    const r = recipes.find(x => x.id === id); 
+                                    if(r) {
+                                        const cols = r.userCollections || [];
+                                        const newCols = cols.includes(col) ? cols.filter(c => c !== col) : [...cols, col];
+                                        const updated = {...r, userCollections: newCols};
+                                        storageService.updateRecipe(updated, session?.user.id);
+                                        setRecipes(prev => prev.map(item => item.id === id ? updated : item));
+                                    }
+                                }}
+                                onSaveRecipe={handleSaveRecipe}
+                                setShowPaywall={() => Alert.alert("Premium Feature")}
+                            />}
+                        </Stack.Screen>
+                        
+                        <Stack.Screen name="Cook">
+                            {props => <CookingMode 
+                                {...props} 
+                                recipes={recipes} 
+                                onAddMusicToHistory={(t) => {
+                                    const updatedProfile = {...userProfile, musicHistory: [...(userProfile.musicHistory || []), t]};
+                                    setUserProfile(updatedProfile);
+                                    storageService.saveProfile(updatedProfile, session?.user.id);
+                                }}
+                                onShareToFeed={() => Alert.alert("Shared!")} 
+                            />}
+                        </Stack.Screen>
+
+                        <Stack.Screen name="Notifications" component={NotificationsScreen} />
+                        <Stack.Screen name="ShoppingList" component={ShoppingListScreen} />
+                    </>
+                )}
+            </Stack.Navigator>
+        </NavigationContainer>
+    </SafeAreaProvider>
   );
 };
 

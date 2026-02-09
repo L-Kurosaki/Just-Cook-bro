@@ -80,7 +80,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ userProfile, setPremium, 
                         </View>
                     )}
                     <View className="absolute bottom-0 right-0 bg-dark p-1 rounded-full border border-white">
-                        <Camera size={10} stroke="white" />
+                        <Camera size={10} color="white" />
                     </View>
                 </TouchableOpacity>
 
@@ -98,7 +98,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ userProfile, setPremium, 
                     <View className="flex-row items-center gap-1 mt-1">
                         {userProfile.isPremium ? (
                             <View className="bg-dark px-2 py-0.5 rounded-full flex-row items-center gap-1">
-                                <Crown size={10} stroke="#C9A24D" />
+                                <Crown size={10} color="#C9A24D" />
                                 <Text className="text-gold text-[10px] font-bold">PRO MEMBER</Text>
                             </View>
                         ) : (
@@ -117,7 +117,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ userProfile, setPremium, 
                     onPress={() => setShowMusicHistory(!showMusicHistory)}
                  >
                      <View className="flex-row items-center gap-2">
-                         <Music size={18} stroke="#1DB954" />
+                         <Music size={18} color="#1DB954" />
                          <Text className="font-bold text-sm text-dark">Music Logs</Text>
                      </View>
                      <Text className="text-xs text-midGrey font-bold">{showMusicHistory ? "Hide" : "View"}</Text>
@@ -142,7 +142,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ userProfile, setPremium, 
                                     ))}
                                 </View>
                                 <TouchableOpacity onPress={handleShareMusic} className="w-full py-2 bg-green-50 rounded-lg flex-row items-center justify-center gap-2">
-                                    <Share2 size={12} stroke="#1DB954" />
+                                    <Share2 size={12} color="#1DB954" />
                                     <Text className="text-[#1DB954] text-xs font-bold">Share Logs</Text>
                                 </TouchableOpacity>
                              </>
@@ -202,7 +202,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ userProfile, setPremium, 
                 >
                     <View className="flex-row justify-between items-start mb-2">
                         <Text className="font-bold text-lg text-white">Upgrade to Pro</Text>
-                        <Crown size={24} stroke="white" />
+                        <Crown size={24} color="white" />
                     </View>
                     <Text className="text-sm text-white/90 mb-4">Unlimited recipes, offline access, and zero ads.</Text>
                     <View className="bg-white self-start px-4 py-2 rounded-lg">
@@ -216,10 +216,10 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ userProfile, setPremium, 
                 className="w-full p-4 bg-white border border-secondary rounded-xl flex-row items-center justify-between mb-20"
             >
                 <View className="flex-row items-center gap-3">
-                    <LogOut size={18} stroke="#EF4444" />
+                    <LogOut size={18} color="#EF4444" />
                     <Text className="text-red-500 font-bold">Sign Out</Text>
                 </View>
-                <ChevronRight size={16} stroke="#EF4444" />
+                <ChevronRight size={16} color="#EF4444" />
             </TouchableOpacity>
 
             <Paywall visible={showPaywall} onClose={() => setShowPaywall(false)} onSuccess={() => { setPremium(true); setShowPaywall(false); }} />

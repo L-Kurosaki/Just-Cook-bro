@@ -19,10 +19,10 @@ const NotificationsScreen: React.FC = () => {
 
   const getIcon = (type: string) => {
     switch (type) {
-      case 'save': return <Bookmark stroke="#C9A24D" size={20} />;
-      case 'cook': return <Heart stroke="#EF4444" size={20} />;
-      case 'review': return <MessageCircle stroke="#3B82F6" size={20} />;
-      default: return <Bell stroke="#6B6B6B" size={20} />;
+      case 'save': return <Bookmark color="#C9A24D" size={20} />;
+      case 'cook': return <Heart color="#EF4444" size={20} />;
+      case 'review': return <MessageCircle color="#3B82F6" size={20} />;
+      default: return <Bell color="#6B6B6B" size={20} />;
     }
   };
 
@@ -34,7 +34,7 @@ const NotificationsScreen: React.FC = () => {
         <ActivityIndicator color="#C9A24D" />
       ) : notifications.length === 0 ? (
         <View className="py-20 bg-secondary rounded-xl items-center justify-center">
-           <Bell size={48} stroke="#9CA3AF" />
+           <Bell size={48} color="#9CA3AF" />
            <Text className="text-midGrey font-medium mt-4">No new activity.</Text>
            <Text className="text-xs text-midGrey mt-1">Post public recipes to get engagement!</Text>
         </View>

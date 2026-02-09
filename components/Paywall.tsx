@@ -40,13 +40,13 @@ const Paywall: React.FC<PaywallProps> = ({ onClose, onSuccess, visible }) => {
         <View className="bg-white rounded-t-3xl p-6 h-[85%]">
           
           <TouchableOpacity onPress={onClose} className="absolute top-4 right-4 z-10 p-2">
-            <X size={24} stroke="#6B6B6B" />
+            <X size={24} color="#6B6B6B" />
           </TouchableOpacity>
 
           <ScrollView showsVerticalScrollIndicator={false}>
             <View className="items-center mb-6 mt-4">
               <View className="w-16 h-16 bg-yellow-50 rounded-full items-center justify-center mb-4 border border-gold/20">
-                <Star size={32} stroke="#C9A24D" fill="#C9A24D" />
+                <Star size={32} color="#C9A24D" fill="#C9A24D" />
               </View>
               <Text className="text-2xl font-bold text-dark text-center">Unlock Just Cook Bro <Text className="text-gold">Pro</Text></Text>
               <Text className="text-midGrey text-sm mt-2 text-center">Become a master of your kitchen.</Text>
@@ -61,7 +61,7 @@ const Paywall: React.FC<PaywallProps> = ({ onClose, onSuccess, visible }) => {
               ].map((feat, i) => (
                 <View key={i} className="flex-row items-center gap-3">
                   <View className="w-5 h-5 bg-gold rounded-full items-center justify-center">
-                    <Check size={12} stroke="white" strokeWidth={4} />
+                    <Check size={12} color="white" strokeWidth={4} />
                   </View>
                   <Text className="text-dark font-medium text-sm">{feat}</Text>
                 </View>

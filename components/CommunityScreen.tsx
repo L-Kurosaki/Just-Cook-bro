@@ -35,7 +35,7 @@ const CommunityScreen = () => {
            <Text className="text-2xl font-bold text-dark mb-4">Community Feed</Text>
            
            <View className="flex-row items-center bg-secondary rounded-xl px-4 py-3 mb-6">
-               <Search size={20} stroke="#6B6B6B" />
+               <Search size={20} color="#6B6B6B" />
                <TextInput 
                   className="flex-1 ml-3 text-dark font-medium"
                   placeholder="What's cooking, good looking?"
@@ -46,7 +46,7 @@ const CommunityScreen = () => {
            </View>
 
            <View className="flex-row items-center gap-2 mb-4">
-               <Flame size={16} stroke="#C9A24D" />
+               <Flame size={16} color="#C9A24D" />
                <Text className="font-bold text-dark text-sm uppercase tracking-widest">Trending Now</Text>
            </View>
 

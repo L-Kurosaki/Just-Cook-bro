@@ -93,7 +93,7 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', width: '100%' }}>
       <View className="items-center mb-10 mt-10">
         <View className="w-32 h-32 mb-4 bg-gold/10 rounded-full items-center justify-center border-4 border-gold/20">
-             <ChefHat size={64} stroke="#C9A24D" />
+             <ChefHat size={64} color="#C9A24D" />
         </View>
         <Text className="text-3xl font-bold text-dark mb-2">Just Cook Bro</Text>
         <Text className="text-midGrey font-medium text-sm text-center">Recipes, organized. Cooking, simplified.</Text>
@@ -130,7 +130,7 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
                 <View>
                     <Text className="text-xs font-bold text-dark mb-1 ml-1">Full Name</Text>
                     <View className="relative">
-                        <View className="absolute left-3 top-3 z-10"><User size={16} stroke="#6B6B6B" /></View>
+                        <View className="absolute left-3 top-3 z-10"><User size={16} color="#6B6B6B" /></View>
                         <TextInput 
                             className="w-full p-3 pl-10 bg-white rounded-xl text-sm border border-gray-100 focus:border-gold"
                             placeholder="Gordon Ramsay"
@@ -142,7 +142,7 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
                 <View>
                     <Text className="text-xs font-bold text-dark mb-1 ml-1">Cellphone Number</Text>
                     <View className="relative">
-                        <View className="absolute left-3 top-3 z-10"><Phone size={16} stroke="#6B6B6B" /></View>
+                        <View className="absolute left-3 top-3 z-10"><Phone size={16} color="#6B6B6B" /></View>
                         <TextInput 
                             keyboardType="phone-pad"
                             className="w-full p-3 pl-10 bg-white rounded-xl text-sm border border-gray-100 focus:border-gold"
@@ -184,7 +184,7 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
           >
             {loading ? <ActivityIndicator color="white" /> : (
                 <View className="flex-row items-center gap-2">
-                    {isLogin ? <LogIn size={20} stroke="white" /> : <UserPlus size={20} stroke="white" />}
+                    {isLogin ? <LogIn size={20} color="white" /> : <UserPlus size={20} color="white" />}
                     <Text className="text-white font-bold text-base">{isLogin ? 'Sign In' : 'Create Account'}</Text>
                 </View>
             )}

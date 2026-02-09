@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, Image, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { ArrowLeft, Clock, Users, Heart, MapPin, Download, ChefHat, Folder, Lock, Plus, Globe, AlertTriangle, Crown, Save, ShoppingCart } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Recipe, UserProfile, StoreLocation, Review } from '../types';
 import ReviewSection from './ReviewSection';
 import { findGroceryStores } from '../services/geminiService';
@@ -21,7 +22,7 @@ interface RecipeDetailProps {
 const RecipeDetailScreen: React.FC<RecipeDetailProps> = ({ 
   recipes, 
   userProfile, 
-  onAddReview, // Deprecated in favor of internal handling
+  onAddReview, 
   onToggleOffline, 
   onAssignCollection, 
   onSaveRecipe,
@@ -29,9 +30,10 @@ const RecipeDetailScreen: React.FC<RecipeDetailProps> = ({
 }) => {
   const route = useRoute<any>();
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+  
   const { id, recipeData } = route.params;
   
-  // Try to find in local recipes (My Cookbook), otherwise use passed data (Community view)
   const localRecipe = recipes.find(r => r.id === id);
   const recipe = localRecipe || recipeData;
   const isOwned = !!localRecipe;
@@ -40,7 +42,6 @@ const RecipeDetailScreen: React.FC<RecipeDetailProps> = ({
   const [stores, setStores] = useState<StoreLocation[]>([]);
   const [loadingStores, setLoadingStores] = useState(false);
   
-  // Real reviews state
   const [reviews, setReviews] = useState<Review[]>(recipe.reviews || []);
   const [loadingReviews, setLoadingReviews] = useState(false);
 
@@ -73,7 +74,6 @@ const RecipeDetailScreen: React.FC<RecipeDetailProps> = ({
 
       await storageService.addReview(recipe.id, newReview);
       
-      // Refresh
       await fetchReviews();
       Alert.alert("Thanks!", "Your review has been posted.");
   };
@@ -118,20 +118,25 @@ const RecipeDetailScreen: React.FC<RecipeDetailProps> = ({
          <Image source={{ uri: recipe.imageUrl }} className="w-full h-full" resizeMode="cover" />
          <View className="absolute inset-0 bg-black/30" />
          
-         <TouchableOpacity onPress={() => navigation.goBack()} className="absolute top-12 left-4 bg-white/20 p-2 rounded-full">
-            <ArrowLeft size={24} stroke="white"/>
+         {/* Safe Area Back Button */}
+         <TouchableOpacity 
+            onPress={() => navigation.goBack()} 
+            className="absolute left-4 bg-white/20 p-2 rounded-full"
+            style={{ top: insets.top + 10 }}
+         >
+            <ArrowLeft size={24} color="white"/>
          </TouchableOpacity>
          
-         <View className="absolute top-12 right-4 gap-2 items-end">
+         <View className="absolute right-4 gap-2 items-end" style={{ top: insets.top + 10 }}>
              {recipe.isPublic && (
                 <View className="bg-black/60 px-3 py-1 rounded-full flex-row items-center gap-1">
-                    <Globe size={10} stroke="white" /> 
+                    <Globe size={10} color="white" /> 
                     <Text className="text-white text-[10px] font-bold">PUBLIC</Text>
                 </View>
              )}
              {recipe.isPremium && (
                 <View className="bg-gold px-3 py-1 rounded-full flex-row items-center gap-1">
-                    <Crown size={10} stroke="white" /> 
+                    <Crown size={10} color="white" /> 
                     <Text className="text-white text-[10px] font-bold">PRO</Text>
                 </View>
              )}
@@ -145,7 +150,7 @@ const RecipeDetailScreen: React.FC<RecipeDetailProps> = ({
                         onPress={() => onToggleOffline(recipe.id)}
                         className={`p-2 rounded-full ${recipe.isOffline ? 'bg-green-100' : 'bg-gray-100'}`}
                      >
-                         <Download size={20} stroke={recipe.isOffline ? "#16A34A" : "#9CA3AF"} />
+                         <Download size={20} color={recipe.isOffline ? "#16A34A" : "#9CA3AF"} />
                      </TouchableOpacity>
                  )}
              </View>
@@ -153,7 +158,7 @@ const RecipeDetailScreen: React.FC<RecipeDetailProps> = ({
              {(recipe.originalAuthor || recipe.author) && (
                  <View className="flex-row items-center gap-2 mb-4">
                     <View className="w-6 h-6 rounded-full bg-gold/10 items-center justify-center">
-                        <ChefHat size={14} stroke="#C9A24D" />
+                        <ChefHat size={14} color="#C9A24D" />
                     </View>
                     <Text className="text-xs text-midGrey">
                         By <Text className="font-bold text-dark">{recipe.originalAuthor || recipe.author}</Text>
@@ -164,10 +169,10 @@ const RecipeDetailScreen: React.FC<RecipeDetailProps> = ({
 
              <View className="flex-row items-center justify-between border-t border-dashed border-gray-100 pt-3">
                  <View className="flex-row items-center gap-4">
-                    <View className="flex-row items-center gap-1"><Clock size={14} stroke="#C9A24D"/><Text className="text-xs text-midGrey">{recipe.prepTime}</Text></View>
-                    <View className="flex-row items-center gap-1"><Users size={14} stroke="#C9A24D"/><Text className="text-xs text-midGrey">{recipe.servings} pp</Text></View>
+                    <View className="flex-row items-center gap-1"><Clock size={14} color="#C9A24D"/><Text className="text-xs text-midGrey">{recipe.prepTime}</Text></View>
+                    <View className="flex-row items-center gap-1"><Users size={14} color="#C9A24D"/><Text className="text-xs text-midGrey">{recipe.servings} pp</Text></View>
                  </View>
-                 <View className="flex-row items-center gap-1"><Heart size={14} stroke="#EF4444" fill="#EF4444"/><Text className="text-xs font-bold text-dark">{recipe.rating || 'New'}</Text></View>
+                 <View className="flex-row items-center gap-1"><Heart size={14} color="#EF4444" fill="#EF4444"/><Text className="text-xs font-bold text-dark">{recipe.rating || 'New'}</Text></View>
              </View>
          </View>
        </View>
@@ -175,7 +180,7 @@ const RecipeDetailScreen: React.FC<RecipeDetailProps> = ({
        <View className="mt-12 p-6">
            {hasAllergy && (
                <View className="mb-6 bg-red-50 p-4 rounded-xl flex-row gap-3 border border-red-200">
-                   <AlertTriangle size={20} stroke="#DC2626" />
+                   <AlertTriangle size={20} color="#DC2626" />
                    <View className="flex-1">
                        <Text className="font-bold text-red-700 text-sm mb-1">ALLERGY WARNING</Text>
                        <Text className="text-xs text-red-600">Ingredients match your allergy profile.</Text>
@@ -208,10 +213,10 @@ const RecipeDetailScreen: React.FC<RecipeDetailProps> = ({
                            </View>
                            <View className="flex-row items-center gap-1">
                                <TouchableOpacity onPress={() => addToShoppingList(ing.name)} className="p-2 bg-gray-50 rounded-lg">
-                                   <ShoppingCart size={16} stroke="#6B6B6B" />
+                                   <ShoppingCart size={16} color="#6B6B6B" />
                                </TouchableOpacity>
                                <TouchableOpacity onPress={() => handleLocateStores(ing.name)} className="p-2">
-                                   <MapPin size={18} stroke="#D1D5DB"/>
+                                   <MapPin size={18} color="#D1D5DB"/>
                                </TouchableOpacity>
                            </View>
                        </View>
@@ -225,7 +230,7 @@ const RecipeDetailScreen: React.FC<RecipeDetailProps> = ({
                    )}
                    {stores.length > 0 && (
                        <View className="mt-4 bg-gray-50 border border-gray-200 p-4 rounded-xl">
-                           <Text className="font-bold text-sm mb-3 text-dark flex-row items-center gap-2"><MapPin size={14} stroke="#C9A24D" /> Available Nearby</Text>
+                           <Text className="font-bold text-sm mb-3 text-dark flex-row items-center gap-2"><MapPin size={14} color="#C9A24D" /> Available Nearby</Text>
                            <View className="gap-2">
                                {stores.map((store, i) => (
                                    <View key={i} className="bg-white p-2 rounded-lg border border-gray-100">
@@ -263,12 +268,12 @@ const RecipeDetailScreen: React.FC<RecipeDetailProps> = ({
            <View className="mt-8 pt-6 border-t border-secondary">
                <View className="flex-row justify-between items-center mb-4">
                    <View className="flex-row items-center gap-2">
-                       <Folder size={16} stroke="#2E2E2E" />
+                       <Folder size={16} color="#2E2E2E" />
                        <Text className="font-bold text-sm text-dark">Collections</Text>
                    </View>
                    {!userProfile.isPremium && (
                        <View className="flex-row items-center gap-1 bg-gray-100 px-2 py-1 rounded-full">
-                           <Lock size={10} stroke="#6B6B6B" /> 
+                           <Lock size={10} color="#6B6B6B" /> 
                            <Text className="text-[10px] text-midGrey">Premium</Text>
                        </View>
                    )}
@@ -287,7 +292,7 @@ const RecipeDetailScreen: React.FC<RecipeDetailProps> = ({
                     onPress={() => { if(!userProfile.isPremium) setShowPaywall(true); else Alert.alert("Use Home screen to add collections"); }} 
                     className="px-4 py-1.5 rounded-full border border-dashed border-gray-300 flex-row items-center gap-1"
                    >
-                       <Plus size={12} stroke="#9CA3AF" />
+                       <Plus size={12} color="#9CA3AF" />
                        <Text className="text-xs font-bold text-gray-400">New</Text>
                    </TouchableOpacity>
                </View>
@@ -308,7 +313,7 @@ const RecipeDetailScreen: React.FC<RecipeDetailProps> = ({
                   onPress={handleSaveToCookbook}
                   className="w-full bg-gold py-4 rounded-xl flex-row items-center justify-center gap-3 shadow-xl"
                >
-                  <Save size={24} stroke="white" />
+                  <Save size={24} color="white" />
                   <Text className="text-white font-bold text-lg">Save to Cookbook</Text>
                </TouchableOpacity>
            ) : (
@@ -316,7 +321,7 @@ const RecipeDetailScreen: React.FC<RecipeDetailProps> = ({
                    onPress={handleStartCooking}
                    className="w-full bg-dark py-4 rounded-xl flex-row items-center justify-center gap-3 shadow-xl"
                >
-                   <ChefHat size={24} stroke="#C9A24D" />
+                   <ChefHat size={24} color="#C9A24D" />
                    <Text className="text-gold font-bold text-lg">Start Cooking</Text>
                </TouchableOpacity>
            )}
