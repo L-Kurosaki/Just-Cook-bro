@@ -51,6 +51,16 @@
         {
           "microphonePermission": "The app accesses your microphone for voice commands during cooking."
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 34,
+            "targetSdkVersion": 34,
+            "buildToolsVersion": "34.0.0"
+          }
+        }
       ]
     ]
   }
