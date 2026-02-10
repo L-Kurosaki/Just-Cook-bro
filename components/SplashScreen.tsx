@@ -1,8 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, Animated, Image } from 'react-native';
-
-// Require the image asset or use a URI if remote
-declare const require: any;
+import { View, Animated } from 'react-native';
+import Logo from './Logo';
 
 const SplashScreen: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
   const fadeAnim = useRef(new Animated.Value(1)).current; 
@@ -32,11 +30,8 @@ const SplashScreen: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
 
   return (
     <Animated.View style={{ opacity: fadeAnim }} className="absolute inset-0 z-50 bg-white flex-1 items-center justify-center">
-      <Animated.View style={{ transform: [{ scale: scaleAnim }] }} className="items-center">
-        <View className="w-40 h-40 mb-6">
-           <Image source={require('../assets/logo.png')} className="w-full h-full" resizeMode="contain" />
-        </View>
-        <Text className="text-2xl font-bold text-dark tracking-wider uppercase">Just Cook Bro</Text>
+      <Animated.View style={{ transform: [{ scale: scaleAnim }] }} className="items-center justify-center flex-1">
+        <Logo size="xl" />
       </Animated.View>
     </Animated.View>
   );

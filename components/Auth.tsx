@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Platform, ScrollView } from 'react-native';
 import { supabase } from '../services/supabaseClient';
-import { LogIn, UserPlus, ChefHat, User, Phone } from 'lucide-react-native';
+import { LogIn, UserPlus, User, Phone } from 'lucide-react-native';
+import Logo from './Logo';
+import '../types';
 
 interface AuthProps {
   onAuthSuccess: (user: any) => void;
@@ -91,12 +93,9 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
   return (
     <View className="flex-1 items-center justify-center bg-white p-6">
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', width: '100%' }}>
-      <View className="items-center mb-10 mt-10">
-        <View className="w-32 h-32 mb-4 bg-gold/10 rounded-full items-center justify-center border-4 border-gold/20">
-             <ChefHat size={64} color="#C9A24D" />
-        </View>
-        <Text className="text-3xl font-bold text-dark mb-2">Just Cook Bro</Text>
-        <Text className="text-midGrey font-medium text-sm text-center">Recipes, organized. Cooking, simplified.</Text>
+      
+      <View className="mt-10 mb-10">
+        <Logo size="xl" />
       </View>
 
       <View className="bg-secondary/30 p-8 rounded-3xl w-full max-w-sm border border-secondary shadow-sm">
