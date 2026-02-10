@@ -1,145 +1,87 @@
-# Just Cook Bro 🍳
+# Just Cook Bro
 
-**Just Cook Bro** is a smart, AI-powered cooking assistant built with React Native and Expo. It transforms the chaotic experience of finding and following recipes into a streamlined, organized, and enjoyable process.
+Just Cook Bro is an advanced cooking assistant developed with React Native and Expo. It leverages Artificial Intelligence to organize the culinary workflow, providing users with tools to scan ingredients, generate recipes, and manage their cooking process efficiently.
 
-## 🌟 Key Features
+## Core Functionality
 
-*   **AI Chef (Gemini Powered):**
-    *   **Photo Scan:** Snap a picture of ingredients or a finished dish, and the AI generates a recipe.
-    *   **Smart Link:** Paste a URL from YouTube, TikTok, or a blog, and the AI extracts the structured recipe, removing clutter and ads.
-    *   **Cooking Help:** Ask the AI specific questions about a step while cooking.
-*   **Interactive Cooking Mode:**
-    *   Step-by-step navigation with large text.
-    *   Built-in timers that alert you when time is up.
-    *   Spotify integration to log your "Cooking Jams".
-*   **Community Feed:**
-    *   Share your best recipes with the world.
-    *   Rate and review recipes from other users.
-*   **Personalization:**
-    *   **Dietary Profiles:** Set Vegan, Keto, etc.
-    *   **Allergy Safety:** Automatic warnings if a recipe contains your allergens.
-*   **Organization:**
-    *   Save to Cookbook.
-    *   Shopping List generator.
-    *   Offline support for saved recipes.
+### 1. Artificial Intelligence Integration
+The application utilizes the Google Gemini API to power its core features:
+*   **Visual Recognition:** Users can capture images of ingredients or finished dishes. The AI analyzes these images to suggest relevant recipes.
+*   **URL Extraction:** The system parses recipe content from external URLs (such as YouTube videos or food blogs), extracting structured data like ingredients and steps while removing extraneous content like advertisements.
+*   **Contextual Assistance:** During the cooking process, users can query the AI for clarifications on techniques or terminology specific to the active step.
 
-## 🛠 Tech Stack
+### 2. Cooking Mode
+The Cooking Mode is designed for hands-free or minimal-interaction use in a kitchen environment:
+*   **Interface:** Features high-contrast, large typography for readability from a distance.
+*   **Timer System:** Timers are automatically detected within instructions and can be activated with a single tap.
+*   **Media Integration:** Users can link their Spotify account to control audio playback directly within the app.
 
-*   **Framework:** React Native (Expo SDK 50+)
+### 3. Data Management and Offline Support
+*   **Local Storage:** Recipes are cached locally on the device, ensuring functionality even without an internet connection.
+*   **Cloud Sync:** When a Supabase connection is configured, user profiles and recipes are synchronized across devices.
+*   **Shopping Lists:** Users can generate checklists directly from recipe ingredients.
+
+### 4. Community Features
+*   **Public Feed:** A platform for users to share their culinary creations.
+*   **Review System:** Users can submit ratings and text-based reviews for shared recipes.
+
+## Technical Requirements
+
+*   **Runtime:** Node.js (Version 18 or newer)
+*   **Framework:** Expo SDK 52
 *   **Language:** TypeScript
-*   **Styling:** NativeWind (Tailwind CSS)
-*   **AI Engine:** Google Gemini (`gemini-3-flash-preview`, `gemini-pro-vision`)
-*   **Backend & Auth:** Supabase (PostgreSQL)
-*   **State Management:** React Hooks + Async Storage (for offline cache)
-*   **Navigation:** React Navigation (Stack + Bottom Tabs)
+*   **AI Provider:** Google Gemini SDK (`@google/genai`)
+*   **Database:** Supabase (Optional for local-only mode)
 
-## 🚀 Getting Started
+## Installation Guide
 
-### Prerequisites
+### Step 1: Install Dependencies
+Run the following command in your project root to install the required packages:
 
-*   Node.js (v18+)
-*   Expo Go app on your phone OR Android Studio/Xcode for simulators.
-
-### Installation
-
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/yourusername/just-cook-bro.git
-    cd just-cook-bro
-    ```
-
-2.  **Install dependencies:**
-    ```bash
-    npm install
-    ```
-
-3.  **Environment Setup:**
-    Create a `.env` file (or ensure keys are set in `services/supabaseClient.ts` and `services/geminiService.ts`):
-    *   `API_KEY`: Your Google Gemini API Key.
-    *   Supabase URL & Anon Key.
-
-4.  **Run the app:**
-    ```bash
-    npx expo start
-    ```
-
-## 🌐 Deployment & Hosting
-
-To host this app for others to test (e.g., on Vercel, Netlify, or Expo Web), you must configure your **Environment Variables** on the hosting platform.
-
-1.  **Build for Web:**
-    ```bash
-    npx expo export -p web
-    ```
-
-2.  **Configure API Key:**
-    In your hosting project settings (e.g., Vercel Dashboard > Settings > Environment Variables), add:
-    *   **Key:** `API_KEY`
-    *   **Value:** `AIzaSy...` (Your actual Google Gemini API Key)
-
-    *Note: Since this is a client-side app, the API key will be embedded in the browser bundle. For a commercial production app, it is recommended to proxy these calls through a backend server.*
-
-## 🗄️ Database Schema (Supabase)
-
-This app requires specific tables in Supabase to function. Run the following in your Supabase **SQL Editor**:
-
-### 1. Profiles Table
-Stores user preferences, premium status, and allergies.
-```sql
-create table public.profiles (
-  id uuid references auth.users on delete cascade not null primary key,
-  email text,
-  is_premium boolean default false,
-  dietary_preferences text[],
-  allergies text[],
-  music_history jsonb, 
-  custom_collections text[],
-  updated_at timestamp with time zone default timezone('utc'::text, now())
-);
+```bash
+yarn install
 ```
 
-### 2. Recipes Table
-Stores both private (cookbook) and public community recipes.
-```sql
-create table public.recipes (
-  id text primary key,
-  user_id uuid references auth.users on delete cascade not null,
-  title text,
-  is_public boolean default false,
-  content jsonb, 
-  created_at timestamp with time zone default timezone('utc'::text, now())
-);
+### Step 2: Configuration
+Create a `.env` file or configure your Expo Secrets with the following keys. These are critical for the application to function.
+
+*   `EXPO_PUBLIC_API_KEY`: Your Google Gemini API Key.
+*   `EXPO_PUBLIC_SUPABASE_URL`: Your Supabase Project URL.
+*   `EXPO_PUBLIC_SUPABASE_ANON_KEY`: Your Supabase Anonymous Key.
+*   `EXPO_PUBLIC_SPOTIFY_CLIENT_ID`: Your Spotify Developer Client ID.
+
+### Step 3: Run the Application
+To start the development server:
+
+```bash
+npx expo start
 ```
 
-### 3. Reviews Table
-Stores community ratings and comments.
-```sql
-create table public.reviews (
-  id uuid default gen_random_uuid() primary key,
-  recipe_id text not null references public.recipes(id) on delete cascade,
-  user_id uuid references auth.users(id) on delete cascade,
-  user_name text,
-  rating int check (rating >= 1 and rating <= 5),
-  comment text,
-  created_at timestamp with time zone default now()
-);
+### Step 4: Build for Android
+To generate an installable APK file for Android devices:
+
+```bash
+eas build -p android --profile preview
 ```
 
-### 4. Enable Security (RLS)
-Don't forget to enable Row Level Security policies (see `sql_setup.sql` if available) to ensure users can only edit their own data.
+## Troubleshooting Common Errors
 
-## 📱 Folder Structure
+### 1. "Couldn't find any versions for @google/genai"
+**Cause:** The package version specified in `package.json` does not exist on the NPM registry.
+**Solution:** Ensure `package.json` specifies `"@google/genai": "^0.1.0"`. Run `yarn install` again.
 
-*   `App.tsx`: Main entry point and Navigation setup.
-*   `components/`: UI Screens and reusable widgets.
-    *   `CookingMode.tsx`: The core step-by-step experience.
-    *   `RecipeDetailScreen.tsx`: View ingredients, reviews, and stores.
-*   `services/`: External API logic.
-    *   `geminiService.ts`: AI prompt engineering.
-    *   `supabaseClient.ts`: Database connection.
-    *   `storageService.ts`: Data abstraction layer (handles Offline vs. Cloud).
-*   `types.ts`: TypeScript interfaces for robust typing.
+### 2. "API Key Missing" or AI Features Failing
+**Cause:** The `EXPO_PUBLIC_API_KEY` is not loaded.
+**Solution:** Ensure the key is present in your `.env` file or Expo Secrets. Restart the development server (`npx expo start --clear`) to clear the cache.
 
-## 📄 License
+### 3. Build Fails on EAS
+**Cause:** Missing credentials or incorrect build profile.
+**Solution:** Use the command `eas build -p android --profile preview`. This profile is configured to generate an APK without requiring Google Play Store keys.
 
-This project is licensed under the MIT License.
+### 4. Spotify Login Redirect Fails
+**Cause:** The redirect URI scheme is not registered.
+**Solution:** Ensure `app.json` contains `"scheme": "justcookbro"` and that you have added `justcookbro://spotify-auth` to your Spotify Developer Dashboard whitelist.
+
+## License
+
+This software is distributed under the MIT License.
