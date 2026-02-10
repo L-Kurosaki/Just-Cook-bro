@@ -2,6 +2,7 @@
   "expo": {
     "name": "Just Cook Bro",
     "slug": "just-cook-bro",
+    "scheme": "justcookbro",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
