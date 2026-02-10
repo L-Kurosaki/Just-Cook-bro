@@ -231,6 +231,52 @@ const DiscoverScreen = ({ navigation }: any) => {
   );
 };
 
+// Wrapper for Profile to manage its own state loading without causing TabNavigator to remount it constantly
+const ProfileWrapper = ({ onLogout }: { onLogout: () => void }) => {
+    const [profile, setProfile] = useState<UserProfile>({name: "Chef", isPremium: false, dietaryPreferences: [], allergies: [], isDeleteLocked: false, musicHistory: []});
+    
+    useEffect(() => { 
+       const load = async () => {
+           let uid = undefined;
+           if(isSupabaseConfigured()) {
+               const { data } = await supabase.auth.getUser();
+               uid = data?.user?.id;
+           }
+           const p = await storageService.getProfile(uid);
+           if(p) setProfile(p);
+       };
+       load();
+    }, []);
+    
+    return (
+        <ProfileScreen 
+           userProfile={profile} 
+           setPremium={(v) => { 
+               const p = {...profile, isPremium: v}; 
+               setProfile(p); 
+               if(isSupabaseConfigured()) {
+                   supabase.auth.getUser().then(({data}) => {
+                       if(data.user) storageService.saveProfile(p, data.user.id);
+                   });
+               } else {
+                   storageService.saveProfile(p);
+               }
+           }} 
+           onUpdateProfile={(p) => { 
+               setProfile(p); 
+               if(isSupabaseConfigured()) {
+                   supabase.auth.getUser().then(({data}) => {
+                       if(data.user) storageService.saveProfile(p, data.user.id);
+                   });
+               } else {
+                   storageService.saveProfile(p);
+               }
+           }} 
+           onLogout={onLogout} 
+        />
+    );
+};
+
 const TabNavigator = ({ onLogout }: any) => (
     <Tab.Navigator 
         id="MainTabs"
@@ -244,51 +290,8 @@ const TabNavigator = ({ onLogout }: any) => (
         <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarIcon: ({color}) => <Home color={color} size={24} /> }} />
         <Tab.Screen name="Discover" component={DiscoverScreen} options={{ tabBarIcon: ({color}) => <Search color={color} size={24} /> }} />
         <Tab.Screen name="Community" component={CommunityScreen} options={{ tabBarIcon: ({color}) => <Globe color={color} size={24} /> }} />
-        <Tab.Screen name="Profile">
-             {(props) => {
-                 const [profile, setProfile] = useState<UserProfile>({name: "Chef", isPremium: false, dietaryPreferences: [], allergies: [], isDeleteLocked: false, musicHistory: []});
-                 
-                 useEffect(() => { 
-                    const load = async () => {
-                        let uid = undefined;
-                        if(isSupabaseConfigured()) {
-                            const { data } = await supabase.auth.getUser();
-                            uid = data?.user?.id;
-                        }
-                        const p = await storageService.getProfile(uid);
-                        if(p) setProfile(p);
-                    };
-                    load();
-                 }, []);
-                 
-                 return (
-                     <ProfileScreen 
-                        userProfile={profile} 
-                        setPremium={(v) => { 
-                            const p = {...profile, isPremium: v}; 
-                            setProfile(p); 
-                            if(isSupabaseConfigured()) {
-                                supabase.auth.getUser().then(({data}) => {
-                                    if(data.user) storageService.saveProfile(p, data.user.id);
-                                });
-                            } else {
-                                storageService.saveProfile(p);
-                            }
-                        }} 
-                        onUpdateProfile={(p) => { 
-                            setProfile(p); 
-                            if(isSupabaseConfigured()) {
-                                supabase.auth.getUser().then(({data}) => {
-                                    if(data.user) storageService.saveProfile(p, data.user.id);
-                                });
-                            } else {
-                                storageService.saveProfile(p);
-                            }
-                        }} 
-                        onLogout={onLogout} 
-                     />
-                 );
-             }}
+        <Tab.Screen name="Profile" options={{ tabBarIcon: ({color}) => <View><Home color={color} size={24} /><View className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full" /></View> }}>
+             {(props) => <ProfileWrapper {...props} onLogout={onLogout} />}
         </Tab.Screen>
     </Tab.Navigator>
 );
