@@ -1,27 +1,83 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Recipe, Step, StoreLocation } from "../types";
 
+// --- CONFIGURATION ---
+
+// We prioritize environment variables but have a fallback for the provided key.
+const GEMINI_API_KEY = process.env.EXPO_PUBLIC_API_KEY || process.env.API_KEY || '';
+const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY || "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";
+
 // Initialize Gemini Client Lazily
-const getAi = () => {
+const getGemini = () => {
   // Safe access to process.env for web environments
-  // We prioritize EXPO_PUBLIC_API_KEY because Expo automatically embeds this in the APK/Bundle
-  const apiKey = process.env.EXPO_PUBLIC_API_KEY || process.env.API_KEY || '';
-  
-  if (!apiKey) {
-      console.error("CRITICAL ERROR: API Key is missing. Gemini features will fail.");
-      // We do not throw here immediately to prevent app crash on load, 
-      // but specific calls will fail if handled below.
+  if (!GEMINI_API_KEY) {
+      console.error("CRITICAL ERROR: Gemini API Key is missing.");
   }
-    
-  return new GoogleGenAI({ apiKey: apiKey });
+  return new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 };
 
-// React Native doesn't support crypto.randomUUID out of the box without polyfills.
 const generateId = () => {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
     return v.toString(16);
   });
+};
+
+// --- OPENAI FALLBACK HELPERS ---
+
+/**
+ * Calls OpenAI GPT-4o as a fallback when Gemini fails.
+ * Supports text and vision inputs.
+ */
+const callOpenAI = async (
+    systemPrompt: string, 
+    userPrompt: string, 
+    imageBase64?: string, 
+    jsonMode: boolean = true
+): Promise<any> => {
+    if (!OPENAI_API_KEY) throw new Error("OpenAI API Key missing for fallback");
+
+    const messages: any[] = [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: [] }
+    ];
+
+    if (imageBase64) {
+        messages[1].content = [
+            { type: "text", text: userPrompt },
+            { 
+                type: "image_url", 
+                image_url: { url: `data:image/jpeg;base64,${imageBase64}` } 
+            }
+        ];
+    } else {
+        messages[1].content = userPrompt;
+    }
+
+    try {
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${OPENAI_API_KEY}`
+            },
+            body: JSON.stringify({
+                model: "gpt-4o",
+                messages: messages,
+                response_format: jsonMode ? { type: "json_object" } : undefined,
+                temperature: 0.7
+            })
+        });
+
+        const data = await response.json();
+        if (data.error) throw new Error(data.error.message);
+
+        const content = data.choices[0].message.content;
+        return jsonMode ? JSON.parse(content) : content;
+    } catch (error: any) {
+        console.error("OpenAI Fallback Error:", error);
+        throw new Error(`OpenAI Fallback Failed: ${error.message}`);
+    }
 };
 
 // Helper to format dietary context for prompts
@@ -34,103 +90,114 @@ const formatDietaryContext = (allergies: string[] = [], diets: string[] = []) =>
     
     CRITICAL INSTRUCTION: 
     1. Check if the recipe contains any restricted ingredients.
-    2. If it does, YOU MUST SUBSTITUTE them with valid alternatives that fit the diet (e.g., use almond milk for dairy, gluten-free flour for wheat, tofu/tempeh for meat).
-    3. Ensure the substitution maintains the texture and flavor of the dish as closely as possible.
-    4. In the 'ingredients' list, explicitly mention the substitution (e.g., "Almond Milk (Dairy-Free subst.)").
-    5. In the 'steps', ensure cooking instructions match the new ingredients.
+    2. If it does, YOU MUST SUBSTITUTE them with valid alternatives that fit the diet.
+    3. In the 'ingredients' list, explicitly mention the substitution.
+    4. In the 'steps', ensure cooking instructions match the new ingredients.
   `;
 };
+
+// Helper to normalize data from either AI into a Recipe object
+const mapToRecipe = (raw: any, imageBase64?: string): Recipe => {
+    return {
+        ...raw,
+        id: generateId(),
+        // If we have a local image (scan), use it. Otherwise fallback to generated/placeholder.
+        imageUrl: imageBase64 
+            ? `data:image/jpeg;base64,${imageBase64}` 
+            : (raw.imageUrl || "https://picsum.photos/800/600"),
+        isPremium: false,
+        author: "AI Chef",
+        reviews: [],
+        isPublic: false,
+        isOffline: false,
+        steps: raw.steps || [],
+        ingredients: raw.ingredients || []
+    };
+};
+
+// --- EXPORTED FUNCTIONS ---
 
 /**
  * Parses a recipe from a raw text description.
  */
 export const parseRecipeFromText = async (text: string, allergies: string[] = [], diets: string[] = []): Promise<Recipe> => {
-  const model = "gemini-2.5-flash";
-  const ai = getAi();
-  
   const dietaryPrompt = formatDietaryContext(allergies, diets);
-
-  const prompt = `
-    You are an expert chef API. 
-    Input: "${text}"
-    ${dietaryPrompt}
-    Structure the input into a recipe JSON.
-  `;
-
-  const response = await ai.models.generateContent({
-    model,
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING },
-          description: { type: Type.STRING },
-          prepTime: { type: Type.STRING },
-          cookTime: { type: Type.STRING },
-          servings: { type: Type.NUMBER },
-          ingredients: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                name: { type: Type.STRING },
-                amount: { type: Type.STRING },
-                category: { type: Type.STRING },
-              },
-            },
-          },
-          steps: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                instruction: { type: Type.STRING },
-                timeInSeconds: { type: Type.NUMBER },
-                tip: { type: Type.STRING },
-                warning: { type: Type.STRING },
-              },
-            },
+  const geminiSchema = {
+    type: Type.OBJECT,
+    properties: {
+      title: { type: Type.STRING },
+      description: { type: Type.STRING },
+      prepTime: { type: Type.STRING },
+      cookTime: { type: Type.STRING },
+      servings: { type: Type.NUMBER },
+      ingredients: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            amount: { type: Type.STRING },
+            category: { type: Type.STRING },
           },
         },
-        required: ["title", "ingredients", "steps"],
+      },
+      steps: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            instruction: { type: Type.STRING },
+            timeInSeconds: { type: Type.NUMBER },
+            tip: { type: Type.STRING },
+            warning: { type: Type.STRING },
+          },
+        },
       },
     },
-  });
-
-  const rawRecipe = JSON.parse(response.text || "{}");
-  
-  return {
-    ...rawRecipe,
-    id: generateId(),
-    imageUrl: "https://picsum.photos/800/600", 
-    isPremium: false,
-    author: "You",
-    reviews: [],
-    isPublic: false,
-    isOffline: false,
-    steps: rawRecipe.steps || []
+    required: ["title", "ingredients", "steps"],
   };
+
+  // 1. Try Gemini
+  try {
+      const ai = getGemini();
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: `You are an expert chef API. Input: "${text}". ${dietaryPrompt}. Structure the input into a recipe JSON.`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: geminiSchema,
+        },
+      });
+      const raw = JSON.parse(response.text || "{}");
+      return mapToRecipe(raw);
+  } catch (e) {
+      console.warn("Gemini parseRecipeFromText failed, attempting OpenAI fallback...", e);
+      
+      // 2. Fallback OpenAI
+      const system = `You are a recipe parser. Return strictly valid JSON matching this structure: { title: string, description: string, prepTime: string, cookTime: string, servings: number, ingredients: [{name, amount, category}], steps: [{instruction, timeInSeconds: number, tip, warning}] }.`;
+      const user = `Parse this text into a recipe: "${text}". ${dietaryPrompt}`;
+      
+      const raw = await callOpenAI(system, user, undefined, true);
+      return mapToRecipe(raw);
+  }
 };
 
 /**
  * Analyzes a URL (YouTube, Blog, etc.) using Google Search grounding.
+ * NOTE: This is Gemini exclusive as OpenAI does not have native search tools in this integration.
  */
 export const extractRecipeFromUrl = async (url: string, allergies: string[] = [], diets: string[] = []): Promise<Recipe> => {
     const model = "gemini-2.5-flash";
-    const ai = getAi();
+    const ai = getGemini();
     const dietaryPrompt = formatDietaryContext(allergies, diets);
 
     const prompt = `
       I have this URL: ${url}
-      
       Tasks:
       1. Visit the URL/Search to find the content.
       2. Extract the recipe details.
       3. Identify the Original Creator/Author Name and their Social Handle if available.
       4. Format into JSON.
-
       ${dietaryPrompt}
     `;
 
@@ -156,10 +223,7 @@ export const extractRecipeFromUrl = async (url: string, allergies: string[] = []
                             type: Type.ARRAY,
                             items: {
                                 type: Type.OBJECT,
-                                properties: {
-                                    name: { type: Type.STRING },
-                                    amount: { type: Type.STRING },
-                                },
+                                properties: { name: { type: Type.STRING }, amount: { type: Type.STRING } },
                             },
                         },
                         steps: {
@@ -197,7 +261,8 @@ export const extractRecipeFromUrl = async (url: string, allergies: string[] = []
         };
     } catch (e: any) {
         console.error("Gemini URL Extraction Error:", e);
-        throw new Error(`Could not extract recipe: ${e.message}`);
+        // We cannot fallback to OpenAI here easily as it requires browsing capability.
+        throw new Error(`Could not extract recipe: ${e.message}. Note: Link extraction relies on Gemini Search.`);
     }
 };
 
@@ -205,24 +270,17 @@ export const extractRecipeFromUrl = async (url: string, allergies: string[] = []
  * Suggests 6 recipes based on the image.
  */
 export const suggestRecipesFromImage = async (base64Image: string, allergies: string[] = [], diets: string[] = []): Promise<Array<{ title: string, description: string }>> => {
-    const model = "gemini-2.5-flash";
-    const ai = getAi();
     const dietaryPrompt = formatDietaryContext(allergies, diets);
 
-    const prompt = `
-      Analyze this image of food.
-      Search for 6 distinct, accurate recipes that match this image.
-      ${dietaryPrompt}
-      Return title and description.
-    `;
-
+    // 1. Try Gemini
     try {
+        const ai = getGemini();
         const response = await ai.models.generateContent({
-            model,
+            model: "gemini-2.5-flash",
             contents: {
                 parts: [
                     { inlineData: { mimeType: "image/jpeg", data: base64Image } },
-                    { text: prompt }
+                    { text: `Analyze this image of food. Search for 6 distinct, accurate recipes that match this image. ${dietaryPrompt}. Return title and description.` }
                 ]
             },
             config: {
@@ -244,9 +302,19 @@ export const suggestRecipesFromImage = async (base64Image: string, allergies: st
 
         return JSON.parse(response.text || "[]");
     } catch (e) {
-        console.error("Gemini Vision Error:", e);
-        // Throwing here ensures the UI knows something went wrong instead of failing silently
-        throw new Error("Failed to analyze image.");
+        console.warn("Gemini Vision failed, attempting OpenAI fallback...", e);
+        
+        // 2. Fallback OpenAI
+        // OpenAI json_object mode requires the root to be an object, not an array.
+        const system = "You are a food expert. Analyze the image and return a JSON object with a key 'suggestions' containing an array of 6 recipes: { suggestions: [{title, description}] }.";
+        const user = `Suggest recipes for this image. ${dietaryPrompt}`;
+        
+        try {
+            const resWrapped = await callOpenAI(system, user, base64Image, true);
+            return resWrapped.suggestions || [];
+        } catch (openAiError) {
+             throw new Error("Both AI services failed to analyze the image.");
+        }
     }
 };
 
@@ -254,102 +322,117 @@ export const suggestRecipesFromImage = async (base64Image: string, allergies: st
  * Step 2 of Image Gen.
  */
 export const generateFullRecipeFromSuggestion = async (suggestion: { title: string, description: string }, base64Image?: string, allergies: string[] = [], diets: string[] = []): Promise<Recipe> => {
-    const model = "gemini-2.5-flash"; // Using 2.5 Flash for speed/reliability
-    const ai = getAi();
     const dietaryPrompt = formatDietaryContext(allergies, diets);
 
-    const prompt = `
-      Create a detailed recipe for "${suggestion.title}".
-      Context: ${suggestion.description}.
-      ${dietaryPrompt}
-    `;
-
-    const response = await ai.models.generateContent({
-        model,
-        contents: prompt,
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    title: { type: Type.STRING },
-                    description: { type: Type.STRING },
-                    prepTime: { type: Type.STRING },
-                    cookTime: { type: Type.STRING },
-                    servings: { type: Type.NUMBER },
-                    ingredients: {
-                        type: Type.ARRAY,
-                        items: {
-                            type: Type.OBJECT,
-                            properties: {
-                                name: { type: Type.STRING },
-                                amount: { type: Type.STRING },
-                                category: { type: Type.STRING },
+    // 1. Try Gemini
+    try {
+        const model = "gemini-2.5-flash";
+        const ai = getGemini();
+        const response = await ai.models.generateContent({
+            model,
+            contents: `Create a detailed recipe for "${suggestion.title}". Context: ${suggestion.description}. ${dietaryPrompt}`,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        title: { type: Type.STRING },
+                        description: { type: Type.STRING },
+                        prepTime: { type: Type.STRING },
+                        cookTime: { type: Type.STRING },
+                        servings: { type: Type.NUMBER },
+                        ingredients: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    name: { type: Type.STRING },
+                                    amount: { type: Type.STRING },
+                                    category: { type: Type.STRING },
+                                },
+                            },
+                        },
+                        steps: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    instruction: { type: Type.STRING },
+                                    timeInSeconds: { type: Type.NUMBER },
+                                    tip: { type: Type.STRING },
+                                    warning: { type: Type.STRING },
+                                },
                             },
                         },
                     },
-                    steps: {
-                        type: Type.ARRAY,
-                        items: {
-                            type: Type.OBJECT,
-                            properties: {
-                                instruction: { type: Type.STRING },
-                                timeInSeconds: { type: Type.NUMBER },
-                                tip: { type: Type.STRING },
-                                warning: { type: Type.STRING },
-                            },
-                        },
-                    },
+                    required: ["title", "ingredients", "steps"],
                 },
-                required: ["title", "ingredients", "steps"],
-            },
-        }
-    });
+            }
+        });
+        const raw = JSON.parse(response.text || "{}");
+        return mapToRecipe(raw, base64Image);
+    } catch (e) {
+        console.warn("Gemini generation failed, attempting OpenAI fallback...", e);
 
-    const rawRecipe = JSON.parse(response.text || "{}");
-    
-    return {
-        ...rawRecipe,
-        id: generateId(),
-        imageUrl: base64Image ? `data:image/jpeg;base64,${base64Image}` : "https://picsum.photos/800/600",
-        isPremium: false,
-        author: "AI Chef",
-        reviews: [],
-        isPublic: false,
-        isOffline: false,
-        steps: rawRecipe.steps || []
-    };
+        // 2. Fallback OpenAI
+        const system = `You are an expert chef. Create a detailed recipe JSON with schema: { title, description, prepTime, cookTime, servings, ingredients: [{name, amount, category}], steps: [{instruction, timeInSeconds, tip, warning}] }.`;
+        const user = `Create recipe for "${suggestion.title}". ${suggestion.description}. ${dietaryPrompt}`;
+        
+        const raw = await callOpenAI(system, user, undefined, true);
+        return mapToRecipe(raw, base64Image);
+    }
 };
 
 export const findGroceryStores = async (ingredient: string, latitude: number, longitude: number): Promise<StoreLocation[]> => {
   const model = "gemini-2.5-flash"; 
-  const ai = getAi();
-  const response = await ai.models.generateContent({
-    model,
-    contents: `Find 3 closest grocery stores near lat:${latitude}, long:${longitude} that likely sell ${ingredient}.`,
-    config: {
-      tools: [{ googleMaps: {} }],
-      toolConfig: { retrievalConfig: { latLng: { latitude, longitude } } },
-    },
-  });
-  const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-  const stores: StoreLocation[] = groundingChunks
-    .filter((chunk: any) => chunk.maps)
-    .map((chunk: any) => ({
-      name: chunk.maps.title,
-      address: chunk.maps.placeAnswerSources?.[0]?.placeId || "Nearby", 
-      uri: chunk.maps.uri,
-      rating: 4.5
-    }));
-  return Array.from(new Map(stores.map(item => [item.name, item])).values()).slice(0, 3);
+  const ai = getGemini();
+  
+  // Maps is unique to Gemini, no OpenAI fallback possible for "finding real places" without external tools
+  try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: `Find 3 closest grocery stores near lat:${latitude}, long:${longitude} that likely sell ${ingredient}.`,
+        config: {
+          tools: [{ googleMaps: {} }],
+          toolConfig: { retrievalConfig: { latLng: { latitude, longitude } } },
+        },
+      });
+      const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+      const stores: StoreLocation[] = groundingChunks
+        .filter((chunk: any) => chunk.maps)
+        .map((chunk: any) => ({
+          name: chunk.maps.title,
+          address: chunk.maps.placeAnswerSources?.[0]?.placeId || "Nearby", 
+          uri: chunk.maps.uri,
+          rating: 4.5
+        }));
+      return Array.from(new Map(stores.map(item => [item.name, item])).values()).slice(0, 3);
+  } catch(e) {
+      console.warn("Gemini Maps failed", e);
+      return [];
+  }
 };
 
 export const getCookingHelp = async (stepInstruction: string, context: string): Promise<string> => {
-  const model = "gemini-2.5-flash";
-  const ai = getAi();
-  const response = await ai.models.generateContent({
-    model,
-    contents: `Step: "${stepInstruction}". Context: "${context}". Give a very short, funny, or encouraging tip. Max 20 words.`,
-  });
-  return response.text || "You got this!";
+  // 1. Try Gemini
+  try {
+    const model = "gemini-2.5-flash";
+    const ai = getGemini();
+    const response = await ai.models.generateContent({
+      model,
+      contents: `Step: "${stepInstruction}". Context: "${context}". Give a very short, funny, or encouraging tip. Max 20 words.`,
+    });
+    return response.text || "You got this!";
+  } catch (e) {
+      console.warn("Gemini help failed, attempting OpenAI fallback...", e);
+      // 2. Fallback OpenAI
+      try {
+        const system = "You are a helpful cooking assistant. Keep it short (max 20 words), funny or encouraging.";
+        const user = `Step: "${stepInstruction}". Context: "${context}".`;
+        const text = await callOpenAI(system, user, undefined, false); // False = text mode
+        return text;
+      } catch (err) {
+        return "You got this! (Offline)";
+      }
+  }
 };

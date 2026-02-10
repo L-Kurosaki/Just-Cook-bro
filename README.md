@@ -5,10 +5,13 @@ Just Cook Bro is an advanced cooking assistant developed with React Native and E
 ## Core Functionality
 
 ### 1. Artificial Intelligence Integration
-The application utilizes the Google Gemini API to power its core features:
-*   **Visual Recognition:** Users can capture images of ingredients or finished dishes. The AI analyzes these images to suggest relevant recipes.
-*   **URL Extraction:** The system parses recipe content from external URLs (such as YouTube videos or food blogs), extracting structured data like ingredients and steps while removing extraneous content like advertisements.
-*   **Contextual Assistance:** During the cooking process, users can query the AI for clarifications on techniques or terminology specific to the active step.
+The application utilizes a **Dual-Engine AI System** for maximum reliability:
+*   **Primary Engine:** Google Gemini API (Visual Recognition, URL Extraction, Search Grounding).
+*   **Fallback Engine:** OpenAI GPT-4o. If Gemini services are unavailable, the app automatically switches to ChatGPT to ensure core cooking features (Scanning, Recipe Generation, Chat) remain functional.
+
+*   **Visual Recognition:** Users can capture images of ingredients or finished dishes.
+*   **URL Extraction:** The system parses recipe content from external URLs (e.g., YouTube, Blogs) using Gemini's search capabilities.
+*   **Contextual Assistance:** During cooking, users can ask the AI for help with specific steps.
 
 ### 2. Cooking Mode
 The Cooking Mode is designed for hands-free or minimal-interaction use in a kitchen environment:
@@ -30,7 +33,9 @@ The Cooking Mode is designed for hands-free or minimal-interaction use in a kitc
 *   **Runtime:** Node.js (Version 18 or newer)
 *   **Framework:** Expo SDK 52
 *   **Language:** TypeScript
-*   **AI Provider:** Google Gemini SDK (`@google/genai`)
+*   **AI Providers:** 
+    *   Google Gemini SDK (`@google/genai`)
+    *   OpenAI API (via Fetch)
 *   **Database:** Supabase (Optional for local-only mode)
 
 ## Installation Guide
@@ -46,6 +51,7 @@ yarn install
 Create a `.env` file or configure your Expo Secrets with the following keys. These are critical for the application to function.
 
 *   `EXPO_PUBLIC_API_KEY`: Your Google Gemini API Key.
+*   `EXPO_PUBLIC_OPENAI_API_KEY`: Your OpenAI API Key (Optional, for fallback).
 *   `EXPO_PUBLIC_SUPABASE_URL`: Your Supabase Project URL.
 *   `EXPO_PUBLIC_SUPABASE_ANON_KEY`: Your Supabase Anonymous Key.
 *   `EXPO_PUBLIC_SPOTIFY_CLIENT_ID`: Your Spotify Developer Client ID.
@@ -64,6 +70,23 @@ To generate an installable APK file for Android devices:
 eas build -p android --profile preview
 ```
 
+## Troubleshooting Common Errors
+
+### 1. "Couldn't find any versions for @google/genai"
+**Cause:** The package version specified in `package.json` does not exist on the NPM registry.
+**Solution:** Ensure `package.json` specifies `"@google/genai": "^0.1.0"`. Run `yarn install` again.
+
+### 2. "API Key Missing" or AI Features Failing
+**Cause:** The `EXPO_PUBLIC_API_KEY` is not loaded.
+**Solution:** Ensure the key is present in your `.env` file or Expo Secrets. Restart the development server (`npx expo start --clear`) to clear the cache.
+
+### 3. Build Fails on EAS
+**Cause:** Missing credentials or incorrect build profile.
+**Solution:** Use the command `eas build -p android --profile preview`. This profile is configured to generate an APK without requiring Google Play Store keys.
+
+### 4. Spotify Login Redirect Fails
+**Cause:** The redirect URI scheme is not registered.
+**Solution:** Ensure `app.json` contains `"scheme": "justcookbro"` and that you have added `justcookbro://spotify-auth` to your Spotify Developer Dashboard whitelist.
 
 ## License
 
