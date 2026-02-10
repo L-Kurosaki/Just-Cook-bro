@@ -64,23 +64,6 @@ To generate an installable APK file for Android devices:
 eas build -p android --profile preview
 ```
 
-## Troubleshooting Common Errors
-
-### 1. "Couldn't find any versions for @google/genai"
-**Cause:** The package version specified in `package.json` does not exist on the NPM registry.
-**Solution:** Ensure `package.json` specifies `"@google/genai": "^0.1.0"`. Run `yarn install` again.
-
-### 2. "API Key Missing" or AI Features Failing
-**Cause:** The `EXPO_PUBLIC_API_KEY` is not loaded.
-**Solution:** Ensure the key is present in your `.env` file or Expo Secrets. Restart the development server (`npx expo start --clear`) to clear the cache.
-
-### 3. Build Fails on EAS
-**Cause:** Missing credentials or incorrect build profile.
-**Solution:** Use the command `eas build -p android --profile preview`. This profile is configured to generate an APK without requiring Google Play Store keys.
-
-### 4. Spotify Login Redirect Fails
-**Cause:** The redirect URI scheme is not registered.
-**Solution:** Ensure `app.json` contains `"scheme": "justcookbro"` and that you have added `justcookbro://spotify-auth` to your Spotify Developer Dashboard whitelist.
 
 ## License
 
