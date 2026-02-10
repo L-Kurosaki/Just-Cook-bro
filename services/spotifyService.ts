@@ -1,9 +1,13 @@
 import { Linking } from 'react-native';
 
-// Simple simulate/mock for demonstration as full OAuth requires native setup or deep linking
-const CLIENT_ID = 'YOUR_SPOTIFY_CLIENT_ID'; 
+// We now use the environment variable for the Client ID.
+// Create an app at https://developer.spotify.com/dashboard to get this ID.
+const CLIENT_ID = process.env.EXPO_PUBLIC_SPOTIFY_CLIENT_ID || ''; 
+
 // In React Native, you typically use a deep link scheme like 'justcookbro://'
+// Ensure you add 'justcookbro://spotify-auth' to the Redirect URIs in your Spotify Dashboard.
 const REDIRECT_URI = 'justcookbro://spotify-auth'; 
+
 const SCOPES = [
   'user-read-currently-playing',
   'user-read-playback-state'
@@ -11,6 +15,10 @@ const SCOPES = [
 
 export const spotifyService = {
   getAuthUrl: () => {
+    if (!CLIENT_ID) {
+        console.warn("Spotify Client ID is missing. Set EXPO_PUBLIC_SPOTIFY_CLIENT_ID.");
+        return '';
+    }
     return `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPES.join(' '))}&response_type=token`;
   },
 
