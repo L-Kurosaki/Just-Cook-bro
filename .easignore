@@ -1,0 +1,25 @@
+# Ignore dependency directories
+node_modules/
+
+# Ignore build generation folders
+.expo/
+dist/
+web-build/
+
+# Ignore cache directories (FIXES THE SOCKET FILE ERROR)
+.cache/
+.npm/
+.yarn/
+
+# Ignore git metadata
+.git/
+
+# Ignore system files
+.DS_Store
+
+# Ignore local native folders (we want EAS to generate these)
+android/
+ios/
+*.apk
+*.aab
+*.ipa

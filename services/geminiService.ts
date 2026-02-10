@@ -4,15 +4,13 @@ import { Recipe, Step, StoreLocation } from "../types";
 // Initialize Gemini Client Lazily
 const getAi = () => {
   // Safe access to process.env for web environments
-  // We check process.env.API_KEY (standard) AND process.env.EXPO_PUBLIC_API_KEY (automatic in Expo)
-  let apiKey = '';
-  
-  if (typeof process !== 'undefined' && process.env) {
-      apiKey = process.env.API_KEY || process.env.EXPO_PUBLIC_API_KEY || '';
-  }
+  // We prioritize EXPO_PUBLIC_API_KEY because Expo automatically embeds this in the APK/Bundle
+  const apiKey = process.env.EXPO_PUBLIC_API_KEY || process.env.API_KEY || '';
   
   if (!apiKey) {
-      throw new Error("Missing API Key. Please check your .env or environment configuration.");
+      console.error("CRITICAL ERROR: API Key is missing. Gemini features will fail.");
+      // We do not throw here immediately to prevent app crash on load, 
+      // but specific calls will fail if handled below.
   }
     
   return new GoogleGenAI({ apiKey: apiKey });
