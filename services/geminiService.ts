@@ -3,19 +3,16 @@ import { Recipe, Step, StoreLocation } from "../types";
 
 // --- CONFIGURATION ---
 
-// We prioritize environment variables.
-// The user must provide these keys in their environment (.env or Expo Secrets).
-const GEMINI_API_KEY = process.env.EXPO_PUBLIC_API_KEY || process.env.API_KEY || '';
-const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
-
 // Initialize Gemini Client Lazily
 const getGemini = () => {
-  if (!GEMINI_API_KEY) {
-      console.error("Gemini API Key is missing. Please set EXPO_PUBLIC_API_KEY.");
+  if (!process.env.API_KEY) {
+      console.error("Gemini API Key is missing. Please set API_KEY.");
       throw new Error("Gemini API Key is missing. Please check your app configuration.");
   }
-  return new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
+
+const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
 
 const generateId = () => {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -165,7 +162,7 @@ export const parseRecipeFromText = async (text: string, allergies: string[] = []
   try {
       const ai = getGemini();
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-3-flash-preview",
         contents: `You are an expert chef API. Input: "${text}". ${dietaryPrompt}. Structure the input into a recipe JSON.`,
         config: {
           responseMimeType: "application/json",
@@ -191,7 +188,7 @@ export const parseRecipeFromText = async (text: string, allergies: string[] = []
  * NOTE: This is Gemini exclusive as OpenAI does not have native search tools in this integration.
  */
 export const extractRecipeFromUrl = async (url: string, allergies: string[] = [], diets: string[] = []): Promise<Recipe> => {
-    const model = "gemini-2.5-flash";
+    const model = "gemini-3-flash-preview";
     const dietaryPrompt = formatDietaryContext(allergies, diets);
 
     const prompt = `
@@ -280,7 +277,7 @@ export const suggestRecipesFromImage = async (base64Image: string, allergies: st
     try {
         const ai = getGemini();
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-3-flash-preview",
             contents: {
                 parts: [
                     { inlineData: { mimeType: "image/jpeg", data: base64Image } },
@@ -330,7 +327,7 @@ export const generateFullRecipeFromSuggestion = async (suggestion: { title: stri
 
     // 1. Try Gemini
     try {
-        const model = "gemini-2.5-flash";
+        const model = "gemini-3-flash-preview";
         const ai = getGemini();
         const response = await ai.models.generateContent({
             model,
@@ -420,7 +417,7 @@ export const findGroceryStores = async (ingredient: string, latitude: number, lo
 export const getCookingHelp = async (stepInstruction: string, context: string): Promise<string> => {
   // 1. Try Gemini
   try {
-    const model = "gemini-2.5-flash";
+    const model = "gemini-3-flash-preview";
     const ai = getGemini();
     const response = await ai.models.generateContent({
       model,
