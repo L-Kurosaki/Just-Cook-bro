@@ -3,15 +3,16 @@ import { Recipe, Step, StoreLocation } from "../types";
 
 // --- CONFIGURATION ---
 
-// We prioritize environment variables but have a fallback for the provided key.
+// We prioritize environment variables.
+// The user must provide these keys in their environment (.env or Expo Secrets).
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_API_KEY || process.env.API_KEY || '';
-const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY || "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";
+const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
 
 // Initialize Gemini Client Lazily
 const getGemini = () => {
-  // Safe access to process.env for web environments
   if (!GEMINI_API_KEY) {
-      console.error("CRITICAL ERROR: Gemini API Key is missing.");
+      console.error("Gemini API Key is missing. Please set EXPO_PUBLIC_API_KEY.");
+      throw new Error("Gemini API Key is missing. Please check your app configuration.");
   }
   return new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 };
@@ -35,7 +36,10 @@ const callOpenAI = async (
     imageBase64?: string, 
     jsonMode: boolean = true
 ): Promise<any> => {
-    if (!OPENAI_API_KEY) throw new Error("OpenAI API Key missing for fallback");
+    if (!OPENAI_API_KEY) {
+        console.warn("OpenAI Fallback requested but no API Key found.");
+        throw new Error("OpenAI Fallback unavailable: Missing EXPO_PUBLIC_OPENAI_API_KEY.");
+    }
 
     const messages: any[] = [
         { role: "system", content: systemPrompt },
@@ -188,7 +192,6 @@ export const parseRecipeFromText = async (text: string, allergies: string[] = []
  */
 export const extractRecipeFromUrl = async (url: string, allergies: string[] = [], diets: string[] = []): Promise<Recipe> => {
     const model = "gemini-2.5-flash";
-    const ai = getGemini();
     const dietaryPrompt = formatDietaryContext(allergies, diets);
 
     const prompt = `
@@ -202,6 +205,7 @@ export const extractRecipeFromUrl = async (url: string, allergies: string[] = []
     `;
 
     try {
+        const ai = getGemini();
         const response = await ai.models.generateContent({
             model,
             contents: prompt,
@@ -385,10 +389,10 @@ export const generateFullRecipeFromSuggestion = async (suggestion: { title: stri
 
 export const findGroceryStores = async (ingredient: string, latitude: number, longitude: number): Promise<StoreLocation[]> => {
   const model = "gemini-2.5-flash"; 
-  const ai = getGemini();
   
   // Maps is unique to Gemini, no OpenAI fallback possible for "finding real places" without external tools
   try {
+      const ai = getGemini();
       const response = await ai.models.generateContent({
         model,
         contents: `Find 3 closest grocery stores near lat:${latitude}, long:${longitude} that likely sell ${ingredient}.`,
