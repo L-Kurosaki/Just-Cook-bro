@@ -1,5 +1,4 @@
 import 'react-native';
-import 'lucide-react-native';
 
 declare module 'react-native' {
   interface ViewProps { className?: string; }
@@ -9,14 +8,6 @@ declare module 'react-native' {
   interface ScrollViewProps { className?: string; }
   interface TextInputProps { className?: string; }
   interface ActivityIndicatorProps { className?: string; }
-}
-
-declare module 'lucide-react-native' {
-  export interface LucideProps {
-    color?: string;
-    size?: number | string;
-    fill?: string;
-  }
 }
 
 export interface Ingredient {
