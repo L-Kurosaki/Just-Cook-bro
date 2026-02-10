@@ -42,6 +42,11 @@
       "favicon": "./assets/favicon.png",
       "bundler": "metro"
     },
+    "extra": {
+      "eas": {
+        "projectId": "https://expo.dev/accounts/yoro_kororo/projects/just-cook-bro"
+      }
+    },
     "plugins": [
       [
         "expo-image-picker",
