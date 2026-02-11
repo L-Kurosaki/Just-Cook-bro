@@ -11,7 +11,7 @@
     "preview": {
       "android": {
         "buildType": "apk",
-        "image": "latest"
+        "image": "ubuntu-22.04-jdk-17-ndk-r26c"
       },
       "ios": {
         "simulator": true,
@@ -21,11 +21,11 @@
     "production": {
       "autoIncrement": true,
       "cache": {
-        "key": "fresh-build-v2"
+        "key": "fresh-build-v3"
       },
       "android": {
         "buildType": "apk",
-        "image": "latest"
+        "image": "ubuntu-22.04-jdk-17-ndk-r26c"
       },
       "env": {
         "EXPO_PUBLIC_API_KEY": "YOUR_API_KEY_HERE_IF_NOT_USING_EAS_SECRETS"
