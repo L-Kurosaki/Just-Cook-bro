@@ -2,51 +2,50 @@
 
 Just Cook Bro is a smart cooking assistant rebuilt with Flutter.
 
-## 💸 Free Hosting Guide
+## 🚨 Troubleshooting Common Errors
 
-If GitHub is asking for money, your repository is likely **Private**. Use **Netlify** instead (it is free for private projects).
+### 1. `Did not find xcodeproj` or Missing `ios/` folder
+If you are building for iOS or macOS and see errors about missing Xcode projects, it means the platform folders weren't generated. Run this in your terminal:
+```bash
+flutter create .
+```
+This regenerates the `ios`, `android`, `web`, `macos`, etc. folders.
 
-### Option 1: The Easiest Way (Netlify Drag & Drop)
-**Best for:** Quick testing without complex setup.
+### 2. GitHub Actions: `403 Forbidden` / `Write access not granted`
+If your deploy fails with a permission error, it's fixed in the latest code, but ensure:
+1. Go to **Settings > Actions > General**.
+2. Scroll to **Workflow permissions**.
+3. Select **Read and write permissions**.
+4. Click **Save**.
 
-1.  **Build the app locally**:
-    Open your terminal in the project folder and run:
-    ```bash
-    flutter build web --release --dart-define=API_KEY=your_gemini_key
-    ```
-    *(Replace `your_gemini_key` with your actual key)*
-
-2.  **Locate the folder**:
-    Go to your project folder -> `build/` -> `web/`.
-    *(This `web` folder contains your full website)*
-
-3.  **Upload**:
-    *   Go to [app.netlify.com/drop](https://app.netlify.com/drop).
-    *   Drag and drop the `web` folder onto the page.
-    *   **Done!** Your app is online for free.
+### 3. `Couldn't find the placeholder for base href`
+Make sure you have committed the file `web/index.html` with the `<base href="$FLUTTER_BASE_HREF">` tag.
 
 ---
 
-### Option 2: Mobile Build (Codemagic)
-**Best for:** Creating the Android App file (.apk).
+## 🔑 Adding API Keys (Required)
 
-1.  Sign up at [Codemagic.io](https://codemagic.io) (Free Tier includes 500 build minutes/month).
-2.  Connect your GitHub repository.
-3.  Codemagic will detect `codemagic.yaml`.
-4.  Add your `API_KEY` in the Environment Variables section.
-5.  Click **Start Build** to get your Android APK file.
+Your app needs API keys to work.
 
----
+### GitHub Actions (Secrets)
+Go to **Settings > Secrets and variables > Actions** and add:
 
-## 🛠 Setup Locally (For Development)
+| Name | Description |
+|------|-------------|
+| `GEMINI_API_KEY` | Gemini AI Key |
+| `SUPABASE_URL` | Supabase Project URL |
+| `SUPABASE_ANON_KEY` | Supabase Anon Key |
+| `RC_GOOGLE_KEY` | RevenueCat Android Key |
+| `RC_APPLE_KEY` | RevenueCat iOS Key |
 
-1.  **Initialize**:
-    ```bash
-    flutter create . --platforms=android,ios,web
-    flutter pub get
-    ```
+### Codemagic (Environment Variables)
+Add these variable names and your values in the Codemagic Workflow Editor.
 
-2.  **Run**:
-    ```bash
-    flutter run --dart-define=API_KEY=your_key
-    ```
+### Local Development
+```bash
+flutter run \
+  --dart-define=API_KEY=your_key \
+  --dart-define=SUPABASE_URL=your_url \
+  --dart-define=SUPABASE_ANON_KEY=your_key \
+  --dart-define=RC_GOOGLE_KEY=your_key
+```

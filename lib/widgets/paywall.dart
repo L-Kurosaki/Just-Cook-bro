@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../services/revenue_cat_service.dart';
+import 'logo.dart';
 
 class Paywall extends StatefulWidget {
   const Paywall({super.key});
@@ -49,37 +50,42 @@ class _PaywallState extends State<Paywall> {
             ),
           ),
           const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: Colors.orange.shade50, shape: BoxShape.circle),
-            child: const Icon(LucideIcons.star, color: Color(0xFFC9A24D), size: 32),
-          ),
+          // Using Logo instead of generic icon for consistency
+          const Logo(size: 80, showText: false),
           const SizedBox(height: 16),
           const Text('Unlock Pro Access', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
           const Text('Become a master of your kitchen.', style: TextStyle(color: Colors.grey)),
           const SizedBox(height: 32),
           
-          if (_loading) const CircularProgressIndicator(color: Color(0xFFC9A24D))
+          if (_loading) 
+             const Expanded(child: Center(child: CircularProgressIndicator(color: Color(0xFFC9A24D))))
+          else if (_packages.isEmpty)
+             const Expanded(child: Center(child: Text("No offers available right now.", style: TextStyle(color: Colors.grey))))
           else Expanded(
             child: ListView.separated(
               itemCount: _packages.length,
               separatorBuilder: (_,__) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final pkg = _packages[index];
+                final isHighlight = pkg.identifier.contains('year') || pkg.identifier.contains('annual');
+                
                 return GestureDetector(
                   onTap: () async {
-                    await _service.purchasePackage(pkg.identifier);
-                    if (mounted) Navigator.pop(context);
+                    final success = await _service.purchasePackage(pkg);
+                    if (success && mounted) {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Welcome to Pro!')));
+                    }
                   },
                   child: Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
                       border: Border.all(
-                        color: pkg.identifier == 'yearly' ? const Color(0xFFC9A24D) : const Color(0xFFF3F4F6),
+                        color: isHighlight ? const Color(0xFFC9A24D) : const Color(0xFFF3F4F6),
                         width: 2
                       ),
                       borderRadius: BorderRadius.circular(16),
-                      color: pkg.identifier == 'yearly' ? Colors.orange.shade50 : Colors.white
+                      color: isHighlight ? Colors.orange.shade50 : Colors.white
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -100,6 +106,14 @@ class _PaywallState extends State<Paywall> {
             ),
           ),
           
+          const SizedBox(height: 16),
+          TextButton(
+            onPressed: () async {
+                await _service.restorePurchases();
+                if (mounted) Navigator.pop(context);
+            },
+            child: const Text('Restore Purchases', style: TextStyle(color: Colors.grey, decoration: TextDecoration.underline)),
+          ),
           const Text('Recurring billing. Cancel anytime.', style: TextStyle(fontSize: 10, color: Colors.grey)),
         ],
       ),

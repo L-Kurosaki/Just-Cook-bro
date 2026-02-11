@@ -8,11 +8,20 @@ workflows:
       groups:
         - google_credentials # Add your keys in Codemagic UI secrets
       vars:
-        API_KEY: "YOUR_GEMINI_KEY" # Set this in Codemagic UI Env Vars
+        # Define these in Codemagic UI Environment Variables
+        API_KEY: "YOUR_GEMINI_KEY" 
+        SUPABASE_URL: "YOUR_SUPABASE_URL"
+        SUPABASE_ANON_KEY: "YOUR_SUPABASE_KEY"
+        RC_GOOGLE_KEY: "YOUR_RC_ANDROID_KEY"
     scripts:
       - name: Get dependencies
         script: flutter pub get
       - name: Build Android APK
-        script: flutter build apk --release --dart-define=API_KEY=$API_KEY
+        script: |
+          flutter build apk --release \
+            --dart-define=API_KEY=$API_KEY \
+            --dart-define=SUPABASE_URL=$SUPABASE_URL \
+            --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY \
+            --dart-define=RC_GOOGLE_KEY=$RC_GOOGLE_KEY
     artifacts:
       - build/app/outputs/flutter-apk/app-release.apk

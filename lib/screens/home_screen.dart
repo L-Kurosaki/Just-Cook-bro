@@ -5,6 +5,7 @@ import '../models.dart';
 import '../services/storage_service.dart';
 import 'recipe_detail_screen.dart';
 import 'add_recipe_screen.dart';
+import '../widgets/logo.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -87,7 +88,8 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(LucideIcons.chefHat, size: 64, color: Colors.grey),
+          // Using the app logo for consistency
+          const Logo(size: 80, showText: false),
           const SizedBox(height: 16),
           const Text('No recipes yet.', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
           TextButton(
