@@ -1,93 +1,60 @@
-# Just Cook Bro
+# Just Cook Bro (Flutter Edition)
 
-Just Cook Bro is an advanced cooking assistant developed with React Native and Expo. It leverages Artificial Intelligence to organize the culinary workflow, providing users with tools to scan ingredients, generate recipes, and manage their cooking process efficiently.
+Just Cook Bro is a smart cooking assistant rebuilt with Flutter. It organizes the culinary workflow using AI to scan ingredients, generate recipes, and guide users through cooking with timers and music.
 
-## Core Functionality
+## Features
 
-### 1. Artificial Intelligence Integration
-The application utilizes a **Dual-Engine AI System** for maximum reliability:
-*   **Primary Engine:** Google Gemini API (Visual Recognition, URL Extraction, Search Grounding).
-*   **Fallback Engine:** OpenAI GPT-4o. If Gemini services are unavailable, the app automatically switches to ChatGPT to ensure core cooking features (Scanning, Recipe Generation, Chat) remain functional.
+*   **AI Chef**: Powered by Google Gemini.
+    *   **Recipe Generation**: Create recipes from text prompts.
+    *   **Visual Recognition**: Scan ingredients to get recipe suggestions.
+    *   **Cooking Helper**: Ask AI for tips during specific cooking steps.
+    *   **Store Finder**: Locate ingredients nearby (Google Maps Grounding).
+*   **Cooking Mode**: Large text, interactive timers, and Spotify integration.
+*   **Cloud Sync**: User profiles and public feed powered by Supabase.
+*   **Offline First**: Recipes are cached locally.
 
-*   **Visual Recognition:** Users can capture images of ingredients or finished dishes.
-*   **URL Extraction:** The system parses recipe content from external URLs (e.g., YouTube, Blogs) using Gemini's search capabilities.
-*   **Contextual Assistance:** During cooking, users can ask the AI for help with specific steps.
+## Project Structure
 
-### 2. Cooking Mode
-The Cooking Mode is designed for hands-free or minimal-interaction use in a kitchen environment:
-*   **Interface:** Features high-contrast, large typography for readability from a distance.
-*   **Timer System:** Timers are automatically detected within instructions and can be activated with a single tap.
-*   **Media Integration:** Users can link their Spotify account to control audio playback directly within the app.
-
-### 3. Data Management and Offline Support
-*   **Local Storage:** Recipes are cached locally on the device, ensuring functionality even without an internet connection.
-*   **Cloud Sync:** When a Supabase connection is configured, user profiles and recipes are synchronized across devices.
-*   **Shopping Lists:** Users can generate checklists directly from recipe ingredients.
-
-### 4. Community Features
-*   **Public Feed:** A platform for users to share their culinary creations.
-*   **Review System:** Users can submit ratings and text-based reviews for shared recipes.
-
-## Technical Requirements
-
-*   **Runtime:** Node.js (Version 18 or newer)
-*   **Framework:** Expo SDK 52
-*   **Language:** TypeScript
-*   **AI Providers:** 
-    *   Google Gemini SDK (`@google/genai`)
-    *   OpenAI API (via Fetch)
-*   **Database:** Supabase (Optional for local-only mode)
-
-## Installation Guide
-
-### Step 1: Install Dependencies
-Run the following command in your project root to install the required packages:
-
-```bash
-yarn install
+```
+lib/
+├── main.dart             # Entry point
+├── models.dart           # Data models (Recipe, User, etc.)
+├── screens/              # UI Screens
+│   ├── home_screen.dart
+│   ├── cooking_mode_screen.dart
+│   ├── recipe_detail_screen.dart
+│   ├── ...
+├── services/             # Logic & API
+│   ├── gemini_service.dart
+│   ├── supabase_service.dart
+│   ├── spotify_service.dart
+│   ├── ...
+└── widgets/              # Reusable UI components
 ```
 
-### Step 2: Configuration
-Create a `.env` file or configure your Expo Secrets with the following keys. These are critical for the application to function.
+## Setup & Run
 
-*   `EXPO_PUBLIC_API_KEY`: Your Google Gemini API Key.
-*   `EXPO_PUBLIC_OPENAI_API_KEY`: Your OpenAI API Key (Optional, for fallback).
-*   `EXPO_PUBLIC_SUPABASE_URL`: Your Supabase Project URL.
-*   `EXPO_PUBLIC_SUPABASE_ANON_KEY`: Your Supabase Anonymous Key.
-*   `EXPO_PUBLIC_SPOTIFY_CLIENT_ID`: Your Spotify Developer Client ID.
+### Prerequisites
+*   Flutter SDK (>=3.2.0)
+*   Supabase Project (for Auth & Cloud DB)
 
-### Step 3: Run the Application
-To start the development server:
+### Installation
+1.  **Get Dependencies**:
+    ```bash
+    flutter pub get
+    ```
 
-```bash
-npx expo start
-```
+2.  **Configuration**:
+    Pass API keys via `--dart-define` or configure them in your environment.
+    *   `API_KEY`: Google Gemini API Key.
+    *   `OPENAI_API_KEY`: (Optional) Fallback AI key.
+    *   `SUPABASE_URL`: Your Supabase URL.
+    *   `SUPABASE_ANON_KEY`: Your Supabase Key.
 
-### Step 4: Build for Android
-To generate an installable APK file for Android devices:
+3.  **Run**:
+    ```bash
+    flutter run --dart-define=API_KEY=your_key_here
+    ```
 
-```bash
-eas build -p android --profile preview
-```
-
-## Troubleshooting Common Errors
-
-### 1. "Couldn't find any versions for @google/genai"
-**Cause:** The package version specified in `package.json` does not exist on the NPM registry.
-**Solution:** Ensure `package.json` specifies `"@google/genai": "^0.1.0"`. Run `yarn install` again.
-
-### 2. "API Key Missing" or AI Features Failing
-**Cause:** The `EXPO_PUBLIC_API_KEY` is not loaded.
-**Solution:** Ensure the key is present in your `.env` file or Expo Secrets. Restart the development server (`npx expo start --clear`) to clear the cache.
-
-### 3. Build Fails on EAS
-**Cause:** Missing credentials or incorrect build profile.
-**Solution:** Use the command `eas build -p android --profile preview`. This profile is configured to generate an APK without requiring Google Play Store keys.
-
-### 4. Spotify Login Redirect Fails
-**Cause:** The redirect URI scheme is not registered.
-**Solution:** Ensure `app.json` contains `"scheme": "justcookbro"` and that you have added `justcookbro://spotify-auth` to your Spotify Developer Dashboard whitelist.
-
-## License
-
-This software is distributed under the MIT License.
+## Dependencies
+See `pubspec.yaml` for the full list of packages, including `google_generative_ai`, `supabase_flutter`, `provider`, and `lucide_icons`.
