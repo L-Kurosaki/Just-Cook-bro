@@ -5,19 +5,16 @@ workflows:
     instance_type: mac_mini_m1
     environment:
       flutter: stable
-      groups:
-        - google_credentials # Add your keys in Codemagic UI secrets
-      vars:
-        # Define these in Codemagic UI Environment Variables
-        API_KEY: "YOUR_GEMINI_KEY" 
-        SUPABASE_URL: "YOUR_SUPABASE_URL"
-        SUPABASE_ANON_KEY: "YOUR_SUPABASE_KEY"
-        RC_GOOGLE_KEY: "YOUR_RC_ANDROID_KEY"
+      # We removed the 'vars' section here. 
+      # Now, Codemagic will look for API_KEY, SUPABASE_URL, etc., 
+      # in the "Environment variables" tab of your project settings.
     scripts:
       - name: Get dependencies
         script: flutter pub get
       - name: Build Android APK
         script: |
+          # The $SIGN before the variable name tells the script to pull 
+          # the value from your Codemagic Environment Variables.
           flutter build apk --release \
             --dart-define=API_KEY=$API_KEY \
             --dart-define=SUPABASE_URL=$SUPABASE_URL \
