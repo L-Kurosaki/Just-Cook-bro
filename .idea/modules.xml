@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/just_cook_bro.iml" filepath="$PROJECT_DIR$/just_cook_bro.iml" />
+      <module fileurl="file://$PROJECT_DIR$/android/just_cook_bro_android.iml" filepath="$PROJECT_DIR$/android/just_cook_bro_android.iml" />
+    </modules>
+  </component>
+</project>
