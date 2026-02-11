@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'package:purchases_ui_flutter/purchases_ui_flutter.dart';
 
-// Strictly use the key from the build environment
-const String _apiKey = String.fromEnvironment('RC_GOOGLE_KEY');
+// Raw environment key (might contain quotes)
+const String _rawApiKey = String.fromEnvironment('RC_GOOGLE_KEY');
 const String _entitlementId = 'pro'; 
 
 class RevenueCatService {
@@ -18,8 +18,16 @@ class RevenueCatService {
   Future<void> init() async {
     if (_isInitialized) return;
 
+    // Clean the key (strip quotes if they exist)
+    String apiKey = _rawApiKey;
+    if (apiKey.startsWith('"') && apiKey.endsWith('"')) {
+      apiKey = apiKey.substring(1, apiKey.length - 1);
+    } else if (apiKey.startsWith("'") && apiKey.endsWith("'")) {
+      apiKey = apiKey.substring(1, apiKey.length - 1);
+    }
+
     // Check if key is missing
-    if (_apiKey.isEmpty) {
+    if (apiKey.isEmpty) {
       print("⚠️ RevenueCat Error: RC_GOOGLE_KEY is missing.");
       return;
     }
@@ -34,7 +42,7 @@ class RevenueCatService {
         await Purchases.setLogLevel(LogLevel.debug);
       }
 
-      PurchasesConfiguration configuration = PurchasesConfiguration(_apiKey);
+      PurchasesConfiguration configuration = PurchasesConfiguration(apiKey);
       await Purchases.configure(configuration);
       _isInitialized = true;
       print("RevenueCat initialized successfully");

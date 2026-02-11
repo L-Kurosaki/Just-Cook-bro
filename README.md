@@ -4,47 +4,43 @@ Just Cook Bro is a smart cooking assistant rebuilt with Flutter.
 
 ## 🚨 Troubleshooting Common Errors
 
-### 1. `Did not find xcodeproj` or Missing `ios/` folder
+### 1. The App shows "Configuration Failed" or Black Screen
+This means the API keys were not passed to the app during the build.
+
+**If you are using the Codemagic UI (Workflow Editor):**
+1. Go to **App settings > Build > Flutter build apk**.
+2. Find the **Build arguments** field.
+3. Paste this **EXACT** line:
+   ```text
+   --dart-define=GEMINI_API_KEY=$GEMINI_API_KEY --dart-define=SUPABASE_URL=$SUPABASE_URL --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY --dart-define=RC_GOOGLE_KEY=$RC_GOOGLE_KEY --dart-define=API_KEY=$GEMINI_API_KEY
+   ```
+
+### 2. `Did not find xcodeproj` or Missing `ios/` folder
 If you are building for iOS or macOS and see errors about missing Xcode projects, it means the platform folders weren't generated. Run this in your terminal:
 ```bash
 flutter create .
 ```
-This regenerates the `ios`, `android`, `web`, `macos`, etc. folders.
-
-### 2. GitHub Actions: `403 Forbidden` / `Write access not granted`
-If your deploy fails with a permission error, it's fixed in the latest code, but ensure:
-1. Go to **Settings > Actions > General**.
-2. Scroll to **Workflow permissions**.
-3. Select **Read and write permissions**.
-4. Click **Save**.
-
-### 3. `Couldn't find the placeholder for base href`
-Make sure you have committed the file `web/index.html` with the `<base href="$FLUTTER_BASE_HREF">` tag.
 
 ---
 
 ## 🔑 Adding API Keys (Required)
 
-Your app needs API keys to work.
+### ⚠️ IMPORTANT: Where to add keys in Codemagic
+**DO NOT** use "Global variables and secrets". That section is read-only for many accounts.
 
-### GitHub Actions (Secrets)
-Go to **Settings > Secrets and variables > Actions** and add:
-
-| Name | Description |
-|------|-------------|
-| `GEMINI_API_KEY` | Gemini AI Key |
-| `SUPABASE_URL` | Supabase Project URL |
-| `SUPABASE_ANON_KEY` | Supabase Anon Key |
-| `RC_GOOGLE_KEY` | RevenueCat Android Key |
-| `RC_APPLE_KEY` | RevenueCat iOS Key |
-
-### Codemagic (Environment Variables)
-Add these variable names and your values in the Codemagic Workflow Editor.
+1.  Go to your **Application** in Codemagic.
+2.  Click on the **Environment variables** tab.
+3.  Add the following keys (Check "Secure" for sensitive keys):
+    *   `GEMINI_API_KEY`
+    *   `SUPABASE_URL`
+    *   `SUPABASE_ANON_KEY` (or `SUPABASE_KEY`)
+    *   `RC_GOOGLE_KEY`
 
 ### Local Development
+To run locally, you must pass the keys in your run command:
 ```bash
 flutter run \
-  --dart-define=API_KEY=your_key \
+  --dart-define=GEMINI_API_KEY=your_key \
   --dart-define=SUPABASE_URL=your_url \
   --dart-define=SUPABASE_ANON_KEY=your_key \
   --dart-define=RC_GOOGLE_KEY=your_key

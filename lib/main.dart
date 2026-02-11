@@ -29,7 +29,8 @@ String _getEnv(String key, [String? fallbackKey]) {
 // ==========================================
 final String _geminiKey = _getEnv('GEMINI_API_KEY', 'API_KEY');
 final String _supabaseUrl = _getEnv('SUPABASE_URL');
-final String _supabaseKey = _getEnv('SUPABASE_ANON_KEY');
+// Added fallback for 'SUPABASE_KEY' in case user named it simply
+final String _supabaseKey = _getEnv('SUPABASE_ANON_KEY', 'SUPABASE_KEY');
 final String _rcGoogleKey = _getEnv('RC_GOOGLE_KEY');
 
 Future<void> main() async {
@@ -110,7 +111,7 @@ class ConfigErrorApp extends StatelessWidget {
     }
 
     check('SUPABASE_URL', _getEnv('SUPABASE_URL'));
-    check('SUPABASE_ANON_KEY', _getEnv('SUPABASE_ANON_KEY'));
+    check('SUPABASE_ANON_KEY', _getEnv('SUPABASE_ANON_KEY', 'SUPABASE_KEY'));
     
     String gem = _getEnv('GEMINI_API_KEY');
     if (gem.isEmpty) gem = _getEnv('API_KEY');
