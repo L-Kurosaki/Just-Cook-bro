@@ -3,6 +3,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../models.dart';
 import '../services/storage_service.dart';
 import '../services/supabase_service.dart';
+import '../services/revenue_cat_service.dart';
 import 'auth_screen.dart';
 import '../widgets/paywall.dart';
 
@@ -15,6 +16,8 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   UserProfile? _profile;
+  final RevenueCatService _rcService = RevenueCatService();
+  bool _isPro = false;
 
   @override
   void initState() {
@@ -24,7 +27,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _load() async {
     final p = await StorageService().getProfile();
-    setState(() => _profile = p);
+    final proStatus = await _rcService.isPremium();
+    
+    if (mounted) {
+      setState(() {
+        _profile = p;
+        _isPro = proStatus;
+        // Update local profile model if needed
+        if (_profile != null) _profile!.isPremium = proStatus;
+      });
+    }
   }
 
   Future<void> _logout() async {
@@ -70,13 +82,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               alignment: Alignment.center,
               child: Text(
-                _profile!.name[0].toUpperCase(),
+                _profile!.name.isNotEmpty ? _profile!.name[0].toUpperCase() : 'C',
                 style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white),
               ),
             ),
             const SizedBox(height: 16),
             Text(_profile!.name, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            if (_profile!.isPremium)
+            
+            // Status Badge
+            if (_isPro)
               Container(
                 margin: const EdgeInsets.only(top: 8),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -86,20 +100,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   children: [
                     Icon(LucideIcons.crown, size: 12, color: Color(0xFFC9A24D)),
                     SizedBox(width: 4),
-                    Text('PRO MEMBER', style: TextStyle(color: Color(0xFFC9A24D), fontSize: 10, fontWeight: FontWeight.bold)),
+                    Text('JUST COOK BRO PRO', style: TextStyle(color: Color(0xFFC9A24D), fontSize: 10, fontWeight: FontWeight.bold)),
                   ],
                 ),
               ),
             const SizedBox(height: 32),
             
-            if (!_profile!.isPremium)
+            // Upgrade / Manage Subscription Card
+            if (!_isPro)
               GestureDetector(
-                onTap: () {
-                   showModalBottomSheet(
+                onTap: () async {
+                   // Option 1: Use the embeddable Paywall widget via a modal
+                   await showModalBottomSheet(
                      context: context, 
                      isScrollControlled: true,
+                     useSafeArea: true,
                      builder: (_) => const Paywall()
                    );
+                   _load(); // Reload status after closing
                 },
                 child: Container(
                   padding: const EdgeInsets.all(20),
@@ -120,6 +138,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                       Icon(LucideIcons.chevronRight, color: Colors.white),
+                    ],
+                  ),
+                ),
+              )
+            else
+              GestureDetector(
+                onTap: () async {
+                   await _rcService.showCustomerCenter();
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border.all(color: const Color(0xFFC9A24D)),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(LucideIcons.settings, color: Color(0xFFC9A24D)),
+                      SizedBox(width: 8),
+                      Text('Manage Subscription', style: TextStyle(color: Color(0xFFC9A24D), fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ),

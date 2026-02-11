@@ -1,25 +1,12 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
+import 'package:purchases_ui_flutter/purchases_ui_flutter.dart';
 
-// Keys from environment
-const String _googleKey = String.fromEnvironment('RC_GOOGLE_KEY');
-const String _appleKey = String.fromEnvironment('RC_APPLE_KEY');
-
-class SubscriptionPackage {
-  final String identifier;
-  final String priceString;
-  final String title;
-  final String description;
-  final Package rcPackage; // The real RevenueCat package object
-
-  SubscriptionPackage({
-    required this.identifier, 
-    required this.priceString, 
-    required this.title, 
-    required this.description,
-    required this.rcPackage,
-  });
-}
+// User provided test key
+const String _apiKey = 'test_BekbchnDGoHXuZwUveusGAGnaZc';
+const String _entitlementId = 'pro'; // Mapping "Just Cook Bro Pro" to the ID 'pro'
 
 class RevenueCatService {
   static final RevenueCatService _instance = RevenueCatService._internal();
@@ -31,24 +18,9 @@ class RevenueCatService {
   Future<void> init() async {
     if (_isInitialized) return;
 
-    String? apiKey;
-    
-    // Select key based on platform
+    // Web is not supported by purchases_flutter in the same way as mobile for this demo context
     if (kIsWeb) {
-      // Web support requires specific configuration usually involving Stripe
-      // For this implementation, we will log a warning if on web
       print("RevenueCat Web configuration required.");
-      return;
-    } else {
-      if (defaultTargetPlatform == TargetPlatform.android) {
-        apiKey = _googleKey;
-      } else if (defaultTargetPlatform == TargetPlatform.iOS) {
-        apiKey = _appleKey;
-      }
-    }
-
-    if (apiKey == null || apiKey.isEmpty) {
-      print("⚠️ RevenueCat API Key missing for this platform.");
       return;
     }
 
@@ -56,66 +28,63 @@ class RevenueCatService {
       if (kDebugMode) {
         await Purchases.setLogLevel(LogLevel.debug);
       }
-      
-      PurchasesConfiguration configuration = PurchasesConfiguration(apiKey);
+
+      PurchasesConfiguration configuration = PurchasesConfiguration(_apiKey);
       await Purchases.configure(configuration);
       _isInitialized = true;
+      print("RevenueCat initialized with key: $_apiKey");
     } catch (e) {
       print("Failed to init RevenueCat: $e");
     }
   }
 
-  Future<List<SubscriptionPackage>> getOfferings() async {
-    if (!_isInitialized) {
-      // Return mock data for testing if keys are missing
-      return [
-        // We can't return valid SubscriptionPackage without real RC objects in this mock fallback
-        // So we return empty list to trigger empty state or loading
-      ];
-    }
-
-    try {
-      Offerings offerings = await Purchases.getOfferings();
-      if (offerings.current != null && offerings.current!.availablePackages.isNotEmpty) {
-        return offerings.current!.availablePackages.map((pkg) {
-          return SubscriptionPackage(
-            identifier: pkg.identifier,
-            priceString: pkg.storeProduct.priceString,
-            title: pkg.storeProduct.title,
-            description: pkg.storeProduct.description,
-            rcPackage: pkg,
-          );
-        }).toList();
-      }
-    } catch (e) {
-      print("Error fetching offerings: $e");
-    }
-    return [];
-  }
-
-  Future<bool> purchasePackage(SubscriptionPackage package) async {
-    if (!_isInitialized) return false;
-    
-    try {
-      CustomerInfo customerInfo = await Purchases.purchasePackage(package.rcPackage);
-      // Check for specific entitlement ID configured in RevenueCat dashboard (e.g. 'pro')
-      return customerInfo.entitlements.all["pro"]?.isActive ?? false;
-    } catch (e) {
-      print("Purchase failed: $e");
-      return false;
-    }
-  }
-
+  /// Check if the user has the 'pro' entitlement (Just Cook Bro Pro)
   Future<bool> isPremium() async {
     if (!_isInitialized) return false;
     try {
       CustomerInfo customerInfo = await Purchases.getCustomerInfo();
-      return customerInfo.entitlements.all["pro"]?.isActive ?? false;
+      // Checking for 'pro' entitlement. Ensure this matches your RevenueCat dashboard.
+      return customerInfo.entitlements.all[_entitlementId]?.isActive ?? false;
     } catch (e) {
+      print("Error checking premium status: $e");
       return false;
     }
   }
-  
+
+  /// Display the RevenueCat Paywall natively
+  /// Returns true if the user purchased or restored successfully
+  Future<bool> showPaywall(BuildContext context) async {
+    if (!_isInitialized) return false;
+
+    try {
+      // Present the Paywall. The handler returns only after dismissal.
+      // We check status afterwards.
+      final paywallResult = await RevenueCatUI.presentPaywallIfNeeded(_entitlementId);
+      
+      // If the paywall was presented and action taken, or if already pro:
+      if (paywallResult == PaywallResult.purchased || paywallResult == PaywallResult.restored) {
+        return true;
+      }
+      
+      // Double check status manually
+      return await isPremium();
+    } catch (e) {
+      print("Error showing paywall: $e");
+      return false;
+    }
+  }
+
+  /// Show the Customer Center for managing subscriptions
+  Future<void> showCustomerCenter() async {
+    if (!_isInitialized) return;
+    try {
+      await RevenueCatUI.presentCustomerCenter();
+    } catch (e) {
+      print("Error showing customer center: $e");
+    }
+  }
+
+  /// Manually restore purchases if needed (Customer Center handles this usually)
   Future<void> restorePurchases() async {
     if (!_isInitialized) return;
     try {
