@@ -3,11 +3,13 @@ import 'dart:typed_data';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import '../models.dart';
 
-// Helper to strip quotes (Duplicated from main.dart for service isolation)
-String _getEnv(String key, [String? fallbackKey]) {
+String _getEnv(String key, String fallbackValue, {String? altKey}) {
   String value = String.fromEnvironment(key);
-  if (value.isEmpty && fallbackKey != null) {
-    value = String.fromEnvironment(fallbackKey);
+  if ((value.isEmpty || value.startsWith('\$')) && altKey != null) {
+    value = String.fromEnvironment(altKey);
+  }
+  if (value.isEmpty || value.startsWith('\$')) {
+    return fallbackValue;
   }
   if (value.startsWith('"') && value.endsWith('"')) {
     value = value.substring(1, value.length - 1);
@@ -15,7 +17,8 @@ String _getEnv(String key, [String? fallbackKey]) {
   return value;
 }
 
-final String _apiKey = _getEnv('GEMINI_API_KEY', 'API_KEY');
+// Added support for 'key' which is what you named it in Codemagic
+final String _apiKey = _getEnv('GEMINI_API_KEY', 'AIzaSyA4wudATZ2vLf3s-OaZKEEBBv37z7jjnaA', altKey: 'key');
 
 class GeminiService {
   late final GenerativeModel _model;
@@ -25,6 +28,7 @@ class GeminiService {
     if (_apiKey.isEmpty) {
       print("⚠️ WARNING: GEMINI_API_KEY is missing.");
     }
+    // gemini-1.5-flash is performant and cheap
     _model = GenerativeModel(model: 'gemini-1.5-flash', apiKey: _apiKey);
     _visionModel = GenerativeModel(model: 'gemini-1.5-flash', apiKey: _apiKey);
   }

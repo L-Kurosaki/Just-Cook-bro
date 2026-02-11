@@ -2,37 +2,24 @@
 
 Just Cook Bro is a smart cooking assistant rebuilt with Flutter.
 
-## 🚨 Troubleshooting Common Errors
+## 🚀 How to Build & Download APK (Free Solution)
 
-### 1. The App shows "Setup Required" or "Configuration Failed"
-This means Codemagic has the keys in settings, but hasn't injected them into the app.
+We have configured **GitHub Actions** to fulfill your requirement for a free hosting and building solution.
 
-**FIX:**
-1. Open Codemagic.
-2. Go to **App settings > Build > Android**.
-3. Find the **Build arguments** input box.
-4. Paste this **EXACT** line:
-   ```text
-   --dart-define=GEMINI_API_KEY=$GEMINI_API_KEY --dart-define=SUPABASE_URL=$SUPABASE_URL --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY --dart-define=RC_GOOGLE_KEY=$RC_GOOGLE_KEY
-   ```
-5. Click **Save** and **Rebuild**.
+1. **Push your code** to a GitHub repository.
+2. Go to the **Actions** tab in your GitHub repository.
+3. Click on the latest **"Android Build"** workflow run.
+4. Scroll down to the **Artifacts** section and click **JustCookBro-APK**.
+5. Extract the zip file and drag the APK onto your emulator.
 
-### 2. Check Variable Names
-Ensure your Environment Variables in Codemagic are named EXACTLY like this (case sensitive):
-*   `GEMINI_API_KEY` (Value: AIza...)
-*   `SUPABASE_URL` (Value: https://...)
-*   `SUPABASE_ANON_KEY` (Value: eyJ...)
-*   `RC_GOOGLE_KEY` (Value: test_Bek...)
+**Note:** The app has backup API keys built-in. It will connect to APIs and run smoothly immediately, even without configuring server secrets.
 
 ---
 
-## 🔑 Adding API Keys (Local Run)
+## 🔑 Custom Keys (Optional)
 
-To run locally on your computer:
-```bash
-flutter run \
-  --dart-define=GEMINI_API_KEY=your_key \
-  --dart-define=SUPABASE_URL=your_url \
-  --dart-define=SUPABASE_ANON_KEY=your_key \
-  --dart-define=RC_GOOGLE_KEY=your_key
-```
+If you want to use your own specific API keys in the future (overriding the backups), go to **Settings > Secrets and variables > Actions** in your GitHub repository and add:
+- `GEMINI_API_KEY`
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `RC_GOOGLE_KEY`

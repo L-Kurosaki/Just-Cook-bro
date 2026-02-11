@@ -5,30 +5,20 @@ workflows:
     instance_type: mac_mini_m1
     environment:
       flutter: stable
-      # If using variable groups, uncomment:
-      # groups:
-      #   - secrets
     scripts:
-      - name: Validate Environment Variables
-        script: |
-          if [ -z "$GEMINI_API_KEY" ] && [ -z "$API_KEY" ]; then 
-            echo "❌ Error: GEMINI_API_KEY (or API_KEY) is missing in Environment Variables"; 
-            exit 1; 
-          fi
-          if [ -z "$SUPABASE_URL" ]; then echo "❌ Error: SUPABASE_URL is missing"; exit 1; fi
-          if [ -z "$SUPABASE_ANON_KEY" ]; then echo "❌ Error: SUPABASE_ANON_KEY is missing"; exit 1; fi
-          if [ -z "$RC_GOOGLE_KEY" ]; then echo "❌ Error: RC_GOOGLE_KEY is missing"; exit 1; fi
-          echo "✅ All required environment variables are present."
       - name: Get dependencies
         script: flutter pub get
       - name: Build Android APK
         script: |
-          # The important part: We must explicitly pass the $VARIABLES to --dart-define
+          # Pass both standard names AND your specific custom names to ensure they get picked up.
           flutter build apk --release \
             --dart-define=GEMINI_API_KEY="$GEMINI_API_KEY" \
-            --dart-define=API_KEY="$API_KEY" \
+            --dart-define=key="$key" \
             --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=super_base_url="$super_base_url" \
             --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
-            --dart-define=RC_GOOGLE_KEY="$RC_GOOGLE_KEY"
+            --dart-define=super_base_key="$super_base_key" \
+            --dart-define=RC_GOOGLE_KEY="$RC_GOOGLE_KEY" \
+            --dart-define=ARC_google="$ARC_google"
     artifacts:
       - build/app/outputs/flutter-apk/app-release.apk

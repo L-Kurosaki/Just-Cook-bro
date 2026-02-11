@@ -4,8 +4,22 @@ import 'package:flutter/material.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'package:purchases_ui_flutter/purchases_ui_flutter.dart';
 
-// Raw environment key (might contain quotes)
-const String _rawApiKey = String.fromEnvironment('RC_GOOGLE_KEY');
+// Helper for Env with fallback
+String _getEnv(String key, String fallbackValue, {String? altKey}) {
+  String value = String.fromEnvironment(key);
+  if ((value.isEmpty || value.startsWith('\$')) && altKey != null) {
+    value = String.fromEnvironment(altKey);
+  }
+  if (value.isEmpty || value.startsWith('\$')) {
+    return fallbackValue;
+  }
+  if (value.startsWith('"') && value.endsWith('"')) {
+    value = value.substring(1, value.length - 1);
+  }
+  return value;
+}
+
+final String _rawApiKey = _getEnv('RC_GOOGLE_KEY', 'test_BekbchnDGoHXuZwUveusGAGnaZc', altKey: 'ARC_google');
 const String _entitlementId = 'pro'; 
 
 class RevenueCatService {
@@ -18,13 +32,8 @@ class RevenueCatService {
   Future<void> init() async {
     if (_isInitialized) return;
 
-    // Clean the key (strip quotes if they exist)
+    // Use the processed key
     String apiKey = _rawApiKey;
-    if (apiKey.startsWith('"') && apiKey.endsWith('"')) {
-      apiKey = apiKey.substring(1, apiKey.length - 1);
-    } else if (apiKey.startsWith("'") && apiKey.endsWith("'")) {
-      apiKey = apiKey.substring(1, apiKey.length - 1);
-    }
 
     // Check if key is missing
     if (apiKey.isEmpty) {

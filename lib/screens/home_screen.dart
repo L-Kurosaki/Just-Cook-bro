@@ -159,8 +159,8 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Hey Chef,', style: TextStyle(color: Color(0xFF2E2E2E), fontWeight: FontWeight.bold, fontSize: 24)),
-            Text('Let\'s cook something.', style: TextStyle(color: Colors.grey, fontSize: 14)),
+            Text('Kitchen Chaos? Not today.', style: TextStyle(color: Color(0xFF2E2E2E), fontWeight: FontWeight.bold, fontSize: 22)),
+            Text('Let\'s make something delicious.', style: TextStyle(color: Colors.grey, fontSize: 14)),
           ],
         ),
         actions: [
@@ -255,23 +255,42 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildEmptyState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Logo(size: 80, showText: false),
-          const SizedBox(height: 16),
-          Text(_activeFilterTag != null ? 'No recipes found for "$_activeFilterTag".' : 'No recipes yet.', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
-          const SizedBox(height: 8),
-           if (_selectedFolderId == null)
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Logo(size: 80, showText: false),
+            const SizedBox(height: 24),
+            Text(
+              _activeFilterTag != null 
+                  ? 'No recipes found for "$_activeFilterTag".' 
+                  : 'Your kitchen is quiet... too quiet.', 
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF2E2E2E))
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              "Start by adding a recipe. Paste a link, take a photo, or just type an idea!",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 24),
+            if (_selectedFolderId == null)
             ElevatedButton(
               onPressed: () async {
                  await Navigator.push(context, MaterialPageRoute(builder: (_) => const AddRecipeScreen()));
                  _loadData();
               },
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC9A24D)),
-              child: const Text('Add your first one', style: TextStyle(color: Colors.white)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFC9A24D),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+              ),
+              child: const Text('Let\'s Cook!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }
