@@ -3,8 +3,19 @@ import 'dart:typed_data';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import '../models.dart';
 
-// Now using GEMINI_API_KEY to match the documentation and Codemagic
-const String _apiKey = String.fromEnvironment('GEMINI_API_KEY');
+// Helper to strip quotes (Duplicated from main.dart for service isolation)
+String _getEnv(String key, [String? fallbackKey]) {
+  String value = String.fromEnvironment(key);
+  if (value.isEmpty && fallbackKey != null) {
+    value = String.fromEnvironment(fallbackKey);
+  }
+  if (value.startsWith('"') && value.endsWith('"')) {
+    value = value.substring(1, value.length - 1);
+  }
+  return value;
+}
+
+final String _apiKey = _getEnv('GEMINI_API_KEY', 'API_KEY');
 
 class GeminiService {
   late final GenerativeModel _model;
