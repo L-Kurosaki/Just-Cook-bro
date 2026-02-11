@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import 'package:provider/provider.dart';
 import '../models.dart';
 import '../services/storage_service.dart';
+import '../services/revenue_cat_service.dart';
 import 'recipe_detail_screen.dart';
 import 'add_recipe_screen.dart';
 import '../widgets/logo.dart';
+import '../widgets/paywall.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -15,9 +16,15 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  List<Recipe> _recipes = [];
+  List<Recipe> _allRecipes = [];
+  List<Recipe> _filteredRecipes = [];
+  List<Folder> _folders = [];
+  String? _selectedFolderId;
+  String? _activeFilterTag; 
+  
   bool _isLoading = true;
   final StorageService _storage = StorageService();
+  final RevenueCatService _rcService = RevenueCatService();
 
   @override
   void initState() {
@@ -26,11 +33,120 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadData() async {
+    setState(() => _isLoading = true);
     final recipes = await _storage.getRecipes();
+    final folders = await _storage.getFolders();
     setState(() {
-      _recipes = recipes;
+      _allRecipes = recipes;
+      _folders = folders;
+      _filterRecipes();
       _isLoading = false;
     });
+  }
+
+  void _filterRecipes() {
+    List<Recipe> temp = _allRecipes;
+    
+    // Filter by Folder
+    if (_selectedFolderId != null) {
+      temp = temp.where((r) => r.folderId == _selectedFolderId).toList();
+    }
+
+    // Filter by Tag
+    if (_activeFilterTag != null) {
+      if (_activeFilterTag == 'My Recipes') {
+         // Maybe logic for authored recipes
+      } else {
+         temp = temp.where((r) => r.tags.contains(_activeFilterTag) || r.title.contains(_activeFilterTag!)).toList();
+      }
+    }
+
+    setState(() {
+      _filteredRecipes = temp;
+    });
+  }
+
+  Future<void> _createFolder() async {
+    final isPremium = await _rcService.isPremium();
+    
+    if (!isPremium) {
+       // Lock folder creation for basic users
+       if (mounted) showModalBottomSheet(context: context, builder: (_) => const Paywall());
+       return;
+    }
+
+    final controller = TextEditingController();
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("New Folder"),
+        content: TextField(
+          controller: controller, 
+          decoration: const InputDecoration(hintText: "Folder Name (e.g. Desserts)"),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () async {
+              if (controller.text.isNotEmpty) {
+                await _storage.createFolder(controller.text);
+                if (mounted) {
+                  Navigator.pop(context);
+                  _loadData();
+                }
+              }
+            }, 
+            child: const Text("Create")
+          )
+        ],
+      ),
+    );
+  }
+
+  void _showFilterSheet() {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("Filter Recipes", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _buildFilterChip("All", null),
+                  _buildFilterChip("Vegan", "Vegan"),
+                  _buildFilterChip("Vegetarian", "Vegetarian"),
+                  _buildFilterChip("Keto", "Keto"),
+                  _buildFilterChip("Gluten-Free", "Gluten-Free"),
+                  _buildFilterChip("Spicy", "Spicy"),
+                  _buildFilterChip("Dessert", "Dessert"),
+                ],
+              )
+            ],
+          ),
+        );
+      }
+    );
+  }
+
+  Widget _buildFilterChip(String label, String? val) {
+    return ChoiceChip(
+      label: Text(label),
+      selected: _activeFilterTag == val,
+      onSelected: (selected) {
+        setState(() => _activeFilterTag = selected ? val : null);
+        _filterRecipes();
+        Navigator.pop(context);
+      },
+      selectedColor: const Color(0xFFC9A24D),
+      labelStyle: TextStyle(color: _activeFilterTag == val ? Colors.white : Colors.black),
+    );
   }
 
   @override
@@ -48,29 +164,37 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         actions: [
+          IconButton(icon: const Icon(LucideIcons.filter, color: Color(0xFF2E2E2E)), onPressed: _showFilterSheet),
           IconButton(icon: const Icon(LucideIcons.bell, color: Color(0xFF2E2E2E)), onPressed: () {}),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Color(0xFFC9A24D)))
-          : _recipes.isEmpty
-              ? _buildEmptyState()
-              : RefreshIndicator(
-                  onRefresh: _loadData,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _recipes.length,
-                    itemBuilder: (context, index) {
-                      return RecipeCard(recipe: _recipes[index], onTap: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => RecipeDetailScreen(recipe: _recipes[index])),
-                        );
-                        _loadData(); // Reload on return
-                      });
-                    },
-                  ),
+          : Column(
+              children: [
+                _buildFolderBar(),
+                Expanded(
+                  child: _filteredRecipes.isEmpty
+                    ? _buildEmptyState()
+                    : RefreshIndicator(
+                        onRefresh: _loadData,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _filteredRecipes.length,
+                          itemBuilder: (context, index) {
+                            return RecipeCard(recipe: _filteredRecipes[index], onTap: () async {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => RecipeDetailScreen(recipe: _filteredRecipes[index])),
+                              );
+                              _loadData(); 
+                            });
+                          },
+                        ),
+                      ),
                 ),
+              ],
+            ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: const Color(0xFFC9A24D),
         onPressed: () async {
@@ -83,22 +207,70 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildFolderBar() {
+    return Container(
+      height: 50,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        children: [
+          _buildFolderChip(null, "All Recipes"),
+          ..._folders.map((f) => _buildFolderChip(f.id, f.name)),
+          Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: ActionChip(
+              label: const Icon(LucideIcons.plus, size: 16, color: Colors.grey),
+              onPressed: _createFolder,
+              backgroundColor: Colors.white,
+              side: const BorderSide(color: Colors.grey),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFolderChip(String? id, String label) {
+    final isSelected = _selectedFolderId == id;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        label: Text(label),
+        selected: isSelected,
+        selectedColor: const Color(0xFFC9A24D),
+        labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.black),
+        backgroundColor: Colors.white,
+        side: isSelected ? BorderSide.none : const BorderSide(color: Colors.grey),
+        onSelected: (val) {
+          setState(() {
+            _selectedFolderId = id;
+            _filterRecipes();
+          });
+        },
+      ),
+    );
+  }
+
   Widget _buildEmptyState() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Using the app logo for consistency
           const Logo(size: 80, showText: false),
           const SizedBox(height: 16),
-          const Text('No recipes yet.', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
-          TextButton(
-            onPressed: () async {
-               await Navigator.push(context, MaterialPageRoute(builder: (_) => const AddRecipeScreen()));
-               _loadData();
-            },
-            child: const Text('Add your first one', style: TextStyle(color: Color(0xFFC9A24D))),
-          ),
+          Text(_activeFilterTag != null ? 'No recipes found for "$_activeFilterTag".' : 'No recipes yet.', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
+          const SizedBox(height: 8),
+           if (_selectedFolderId == null)
+            ElevatedButton(
+              onPressed: () async {
+                 await Navigator.push(context, MaterialPageRoute(builder: (_) => const AddRecipeScreen()));
+                 _loadData();
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC9A24D)),
+              child: const Text('Add your first one', style: TextStyle(color: Colors.white)),
+            ),
         ],
       ),
     );
@@ -154,13 +326,27 @@ class RecipeCard extends StatelessWidget {
                       ),
                       if (recipe.isPremium)
                          Container(
+                           margin: const EdgeInsets.only(left: 8),
                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                            decoration: BoxDecoration(color: const Color(0xFF2E2E2E), borderRadius: BorderRadius.circular(4)),
                            child: const Text('PRO', style: TextStyle(color: Color(0xFFC9A24D), fontSize: 10, fontWeight: FontWeight.bold)),
                          ),
                     ],
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
+                  if (recipe.tags.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Wrap(
+                        spacing: 4,
+                        children: recipe.tags.take(3).map((t) => Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.grey.shade300)),
+                          child: Text(t, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                        )).toList(),
+                      ),
+                    ),
+                  
                   Text(recipe.description, style: const TextStyle(color: Color(0xFF6B6B6B), fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 12),
                   Row(

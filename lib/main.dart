@@ -6,16 +6,17 @@ import 'screens/splash_screen.dart';
 import 'services/revenue_cat_service.dart';
 
 // ==========================================
-// SUPABASE CONFIGURATION
+// CONFIGURATION
 // ==========================================
 const String _supabaseUrl = String.fromEnvironment('SUPABASE_URL');
 const String _supabaseKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+const String _geminiKey = String.fromEnvironment('GEMINI_API_KEY');
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // CRITICAL: Check if keys were actually passed during build
-  if (_supabaseUrl.isEmpty || _supabaseKey.isEmpty) {
+  if (_supabaseUrl.isEmpty || _supabaseKey.isEmpty || _geminiKey.isEmpty) {
     runApp(const ConfigErrorApp());
     return;
   }
@@ -74,6 +75,12 @@ class ConfigErrorApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Determine which keys are missing for the UI
+    final missingKeys = <String>[];
+    if (const String.fromEnvironment('SUPABASE_URL').isEmpty) missingKeys.add('SUPABASE_URL');
+    if (const String.fromEnvironment('SUPABASE_ANON_KEY').isEmpty) missingKeys.add('SUPABASE_ANON_KEY');
+    if (const String.fromEnvironment('GEMINI_API_KEY').isEmpty) missingKeys.add('GEMINI_API_KEY');
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       home: Scaffold(
@@ -91,10 +98,12 @@ class ConfigErrorApp extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               const Text(
-                'The App was built without API Keys.',
+                'The App was built without the following API Keys:',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 16),
               ),
+              const SizedBox(height: 16),
+              ...missingKeys.map((key) => Text('• $key', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red))),
               const SizedBox(height: 24),
               Container(
                 padding: const EdgeInsets.all(16),
@@ -105,10 +114,8 @@ class ConfigErrorApp extends StatelessWidget {
                 ),
                 child: const Text(
                   '1. Check Codemagic "Environment variables".\n'
-                  '2. If using a Group, add it to codemagic.yaml.\n'
-                  '3. Ensure variable names match:\n'
-                  '   SUPABASE_URL\n'
-                  '   SUPABASE_ANON_KEY',
+                  '2. Ensure variable names match exactly.\n'
+                  '3. If running locally, add keys to .vscode/launch.json.',
                   style: TextStyle(fontFamily: 'monospace'),
                 ),
               ),

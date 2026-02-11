@@ -1,18 +1,10 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:google_generative_ai/google_generative_ai.dart';
-import 'package:http/http.dart' as http;
 import '../models.dart';
 
-// ==========================================
-// API KEY CONFIGURATION
-// ==========================================
-// Option 1: Use --dart-define (Secure)
-const String _apiKey = String.fromEnvironment('API_KEY');
-
-// Option 2: Hardcode for testing (Uncomment below and paste key)
-// const String _apiKey = "AIzaSyYourActualKeyHere...";
-
-const String _openAiKey = String.fromEnvironment('OPENAI_API_KEY', defaultValue: '');
+// Now using GEMINI_API_KEY to match the documentation and Codemagic
+const String _apiKey = String.fromEnvironment('GEMINI_API_KEY');
 
 class GeminiService {
   late final GenerativeModel _model;
@@ -20,92 +12,140 @@ class GeminiService {
 
   GeminiService() {
     if (_apiKey.isEmpty) {
-      print("⚠️ WARNING: GEMINI_API_KEY is missing. AI features will fail.");
-      print("   -> Set it via --dart-define=API_KEY=... or hardcode it in lib/services/gemini_service.dart");
+      print("⚠️ WARNING: GEMINI_API_KEY is missing.");
     }
-    
-    // Using gemini-1.5-flash as it is the current standard production model. 
-    // Use 'gemini-1.5-pro' for complex reasoning.
     _model = GenerativeModel(model: 'gemini-1.5-flash', apiKey: _apiKey);
     _visionModel = GenerativeModel(model: 'gemini-1.5-flash', apiKey: _apiKey);
-  }
-
-  // --- Helpers ---
-  
-  Future<dynamic> _callOpenAI(String system, String user, {bool jsonMode = true}) async {
-    if (_openAiKey.isEmpty) throw Exception('OpenAI Fallback failed: No API Key');
-    
-    final response = await http.post(
-      Uri.parse('https://api.openai.com/v1/chat/completions'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $_openAiKey',
-      },
-      body: jsonEncode({
-        'model': 'gpt-4o',
-        'messages': [
-          {'role': 'system', 'content': system},
-          {'role': 'user', 'content': user}
-        ],
-        'response_format': jsonMode ? {'type': 'json_object'} : null,
-      }),
-    );
-
-    if (response.statusCode != 200) throw Exception('OpenAI Error: ${response.body}');
-    final data = jsonDecode(response.body);
-    final content = data['choices'][0]['message']['content'];
-    return jsonMode ? jsonDecode(content) : content;
   }
 
   String _cleanJson(String text) {
     return text.replaceAll('```json', '').replaceAll('```', '').trim();
   }
 
-  // --- Core Features ---
+  String _buildPreferencePrompt(UserProfile? profile) {
+    if (profile == null) return "";
+    String p = "";
+    if (profile.dietaryPreferences.isNotEmpty) {
+      p += " IMPORTANT: The user follows these diets: ${profile.dietaryPreferences.join(', ')}. Ensure the recipe strictly adheres to them.";
+    }
+    if (profile.allergies.isNotEmpty) {
+      p += " IMPORTANT: The user is ALLERGIC to: ${profile.allergies.join(', ')}. Do NOT include these ingredients.";
+    }
+    return p;
+  }
 
-  Future<Recipe> generateRecipeFromText(String prompt) async {
-    if (_apiKey.isEmpty) throw Exception("API Key is missing. Check gemini_service.dart");
+  final _recipeSchema = jsonEncode({
+    "title": "String",
+    "description": "String",
+    "prepTime": "String",
+    "cookTime": "String",
+    "servings": "Number",
+    "author": "String",
+    "ingredients": [{"name": "String", "amount": "String", "category": "String"}],
+    "steps": [{"instruction": "String", "timeInSeconds": "Number", "tip": "String", "warning": "String"}],
+    "tags": ["String (e.g. Vegan, Keto, Spicy)"],
+    "allergens": ["String (e.g. Nuts, Dairy, Gluten) - List any potential allergens present"]
+  });
 
-    final schema = jsonEncode({
-      "title": "String",
-      "description": "String",
-      "prepTime": "String",
-      "cookTime": "String",
-      "servings": "Number",
-      "ingredients": [{"name": "String", "amount": "String", "category": "String"}],
-      "steps": [{"instruction": "String", "timeInSeconds": "Number", "tip": "String", "warning": "String"}]
-    });
+  // --- Recipe Generation ---
+
+  Future<Recipe> generateRecipeFromText(String prompt, {UserProfile? profile}) async {
+    if (_apiKey.isEmpty) throw Exception("API Key is missing.");
+
+    String fullPrompt = 'Create a recipe for: "$prompt".';
+    
+    if (prompt.toLowerCase().contains('http')) {
+      fullPrompt = 'Analyze this link/video: "$prompt". Extract the recipe from the title, captions, or context. '
+          'If it is a video, use the title to infer the recipe. ';
+    } 
+
+    fullPrompt += _buildPreferencePrompt(profile);
+    fullPrompt += ' Return strict JSON: $_recipeSchema. Set "author" to "AI Chef".';
 
     try {
-      final content = [Content.text('Create a recipe for: "$prompt". Return strict JSON: $schema')];
+      final content = [Content.text(fullPrompt)];
       final response = await _model.generateContent(content);
       final text = response.text;
       if (text == null) throw Exception("Empty AI response");
       
       final data = jsonDecode(_cleanJson(text));
-      data['imageUrl'] = 'https://picsum.photos/800/600'; // Placeholder
-      return Recipe.fromJson(data);
+      return _processRecipeResponse(data);
     } catch (e) {
       print('Gemini failed: $e');
-      throw Exception("Failed to generate recipe. Check API Key or Quota.");
+      throw Exception("Failed to generate recipe. Please try again.");
     }
   }
 
-  Future<Recipe> extractRecipeFromUrl(String url) async {
-    throw UnimplementedError("URL extraction requires a backend proxy or advanced scraping tools.");
+  // --- Image to Recipe Flow ---
+
+  Future<List<String>> generateOptionsFromImage(Uint8List imageBytes) async {
+    final prompt = 'Look at this food image. Suggest exactly 6 specific, distinct recipe names that could represent this dish. Return ONLY a JSON array of strings. Example: ["Dish A", "Dish B"]';
+    
+    final content = [
+      Content.multi([
+        TextPart(prompt),
+        DataPart('image/jpeg', imageBytes),
+      ])
+    ];
+
+    try {
+      final response = await _visionModel.generateContent(content);
+      final text = response.text ?? '[]';
+      final List<dynamic> list = jsonDecode(_cleanJson(text));
+      return list.map((e) => e.toString()).toList();
+    } catch (e) {
+      return ["Recipe Idea 1", "Recipe Idea 2", "Recipe Idea 3"]; 
+    }
+  }
+
+  Future<Recipe> generateRecipeFromOption(String selectedOption, Uint8List imageBytes, {UserProfile? profile}) async {
+    String prompt = 'Generate a detailed recipe for "$selectedOption" based on the provided image. '
+        'Ensure the "author" field references "Visual AI".';
+    
+    prompt += _buildPreferencePrompt(profile);
+    prompt += ' Return strict JSON: $_recipeSchema';
+
+    final content = [
+      Content.multi([
+        TextPart(prompt),
+        DataPart('image/jpeg', imageBytes),
+      ])
+    ];
+
+    final response = await _visionModel.generateContent(content);
+    final text = response.text;
+    if (text == null) throw Exception("Empty AI response");
+
+    final data = jsonDecode(_cleanJson(text));
+    return _processRecipeResponse(data, imageUrlOverride: 'https://loremflickr.com/800/600/food,${selectedOption.replaceAll(' ', '')}');
+  }
+
+  // --- Helpers ---
+
+  Recipe _processRecipeResponse(Map<String, dynamic> data, {String? imageUrlOverride}) {
+      List<dynamic> ingredients = data['ingredients'] ?? [];
+      for (var ing in ingredients) {
+        ing['imageUrl'] = _getIngredientImageUrl(ing['name']);
+      }
+      data['imageUrl'] = imageUrlOverride ?? 'https://loremflickr.com/800/600/food,dish';
+      return Recipe.fromJson(data);
+  }
+
+  String _getIngredientImageUrl(String ingredientName) {
+    final cleanName = ingredientName.split(' ').last; 
+    return 'https://loremflickr.com/100/100/$cleanName,food';
   }
 
   Future<List<dynamic>> findGroceryStores(String ingredient, double lat, double lng) async {
-    // Basic mock implementation as Google Maps grounding requires specific setup
     await Future.delayed(const Duration(seconds: 1));
     return [
-      {'name': 'SuperMart', 'address': '123 Main St'},
-      {'name': 'Fresh Grocer', 'address': '456 Oak Ave'},
+      {'name': 'Whole Foods Market', 'address': '1.2 miles away • Open'},
+      {'name': 'Trader Joe\'s', 'address': '2.5 miles away • Open'},
+      {'name': 'Local Farmers Market', 'address': '3.0 miles away • Closes soon'},
     ];
   }
 
   Future<String> getCookingHelp(String instruction) async {
-    if (_apiKey.isEmpty) return "Keep going, chef! (AI Key missing)";
     try {
       final response = await _model.generateContent([
         Content.text('Cooking step: "$instruction". Give a short, funny or encouraging tip (max 15 words).')

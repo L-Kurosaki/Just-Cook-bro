@@ -6,12 +6,14 @@ class Ingredient {
   final String name;
   final String amount;
   final String? category;
+  final String? imageUrl; // New: For visualization
   bool owned;
 
   Ingredient({
     required this.name,
     required this.amount,
     this.category,
+    this.imageUrl,
     this.owned = false,
   });
 
@@ -20,6 +22,7 @@ class Ingredient {
       name: json['name'] ?? '',
       amount: json['amount'] ?? '',
       category: json['category'],
+      imageUrl: json['imageUrl'],
       owned: json['owned'] ?? false,
     );
   }
@@ -28,6 +31,7 @@ class Ingredient {
     'name': name,
     'amount': amount,
     'category': category,
+    'imageUrl': imageUrl,
     'owned': owned,
   };
 }
@@ -77,6 +81,9 @@ class Recipe {
   final bool isPublic;
   final String? author;
   final int? rating;
+  final String? folderId; 
+  final List<String> tags; // New: For filtering (e.g. Vegan, Keto)
+  final List<String> allergens; // New: For safety warnings
 
   Recipe({
     String? id,
@@ -93,6 +100,9 @@ class Recipe {
     this.isPublic = false,
     this.author,
     this.rating,
+    this.folderId,
+    this.tags = const [],
+    this.allergens = const [],
   }) : id = id ?? uuid.v4();
 
   factory Recipe.fromJson(Map<String, dynamic> json) {
@@ -115,6 +125,9 @@ class Recipe {
       isPublic: json['isPublic'] ?? false,
       author: json['author'],
       rating: json['rating'],
+      folderId: json['folderId'],
+      tags: List<String>.from(json['tags'] ?? []),
+      allergens: List<String>.from(json['allergens'] ?? []),
     );
   }
 
@@ -133,6 +146,50 @@ class Recipe {
     'isPublic': isPublic,
     'author': author,
     'rating': rating,
+    'folderId': folderId,
+    'tags': tags,
+    'allergens': allergens,
+  };
+  
+  Recipe copyWith({String? folderId}) {
+    return Recipe(
+      id: id,
+      title: title,
+      description: description,
+      prepTime: prepTime,
+      cookTime: cookTime,
+      servings: servings,
+      ingredients: ingredients,
+      steps: steps,
+      imageUrl: imageUrl,
+      isPremium: isPremium,
+      isOffline: isOffline,
+      isPublic: isPublic,
+      author: author,
+      rating: rating,
+      folderId: folderId ?? this.folderId,
+      tags: tags,
+      allergens: allergens,
+    );
+  }
+}
+
+class Folder {
+  final String id;
+  final String name;
+
+  Folder({String? id, required this.name}) : id = id ?? uuid.v4();
+
+  factory Folder.fromJson(Map<String, dynamic> json) {
+    return Folder(
+      id: json['id'],
+      name: json['name'],
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
   };
 }
 

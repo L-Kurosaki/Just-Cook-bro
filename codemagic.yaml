@@ -5,21 +5,24 @@ workflows:
     instance_type: mac_mini_m1
     environment:
       flutter: stable
+      # If you use a Group in Codemagic (e.g. named "secrets"), uncomment the line below:
+      # groups:
+      #   - secrets
     scripts:
       - name: Validate Environment Variables
         script: |
-          # This script checks if your Codemagic variables are set correctly
-          if [ -z "$API_KEY" ]; then echo "❌ Error: API_KEY is missing in Codemagic"; exit 1; fi
-          if [ -z "$SUPABASE_URL" ]; then echo "❌ Error: SUPABASE_URL is missing in Codemagic"; exit 1; fi
-          if [ -z "$SUPABASE_ANON_KEY" ]; then echo "❌ Error: SUPABASE_ANON_KEY is missing in Codemagic"; exit 1; fi
-          if [ -z "$RC_GOOGLE_KEY" ]; then echo "❌ Error: RC_GOOGLE_KEY is missing in Codemagic"; exit 1; fi
-          echo "✅ All API keys are present."
+          # Check for keys. If these fail, check your Codemagic Environment Variables settings.
+          if [ -z "$GEMINI_API_KEY" ]; then echo "❌ Error: GEMINI_API_KEY is missing"; exit 1; fi
+          if [ -z "$SUPABASE_URL" ]; then echo "❌ Error: SUPABASE_URL is missing"; exit 1; fi
+          if [ -z "$SUPABASE_ANON_KEY" ]; then echo "❌ Error: SUPABASE_ANON_KEY is missing"; exit 1; fi
+          if [ -z "$RC_GOOGLE_KEY" ]; then echo "❌ Error: RC_GOOGLE_KEY is missing"; exit 1; fi
+          echo "✅ All API keys are detected."
       - name: Get dependencies
         script: flutter pub get
       - name: Build Android APK
         script: |
           flutter build apk --release \
-            --dart-define=API_KEY="$API_KEY" \
+            --dart-define=GEMINI_API_KEY="$GEMINI_API_KEY" \
             --dart-define=SUPABASE_URL="$SUPABASE_URL" \
             --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
             --dart-define=RC_GOOGLE_KEY="$RC_GOOGLE_KEY"

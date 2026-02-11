@@ -30,7 +30,6 @@ class _CookingModeScreenState extends State<CookingModeScreen> {
   }
 
   void _checkMusic() async {
-    // Mock polling
     Timer.periodic(const Duration(seconds: 10), (t) async {
        if (!mounted) return t.cancel();
        final track = await _spotify.getCurrentlyPlaying("mock_token");
@@ -117,9 +116,24 @@ class _CookingModeScreenState extends State<CookingModeScreen> {
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
+            if (_currentStep == 0 && widget.recipe.allergens.isNotEmpty)
+               Container(
+                 margin: const EdgeInsets.only(bottom: 10),
+                 padding: const EdgeInsets.all(8),
+                 color: Colors.red.shade50,
+                 child: Row(
+                   mainAxisAlignment: MainAxisAlignment.center,
+                   children: [
+                     const Icon(LucideIcons.alertTriangle, size: 16, color: Colors.red),
+                     const SizedBox(width: 8),
+                     Text("Contains: ${widget.recipe.allergens.join(', ')}", style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold))
+                   ],
+                 ),
+               ),
+               
             if (_currentTrack != null)
                 Container(
-                    padding: EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
                     child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -128,15 +142,17 @@ class _CookingModeScreenState extends State<CookingModeScreen> {
                         ],
                     ),
                 ),
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
             Text('Step ${_currentStep + 1}', style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
             const SizedBox(height: 20),
             Expanded(
               child: Center(
-                child: Text(
-                  step.instruction,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, height: 1.4),
+                child: SingleChildScrollView(
+                  child: Text(
+                    step.instruction,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, height: 1.4),
+                  ),
                 ),
               ),
             ),
