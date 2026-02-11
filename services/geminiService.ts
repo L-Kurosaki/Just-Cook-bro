@@ -5,11 +5,12 @@ import { Recipe, Step, StoreLocation } from "../types";
 
 // Initialize Gemini Client Lazily
 const getGemini = () => {
-  if (!process.env.API_KEY) {
-      console.error("Gemini API Key is missing. Please set API_KEY.");
+  const apiKey = process.env.EXPO_PUBLIC_API_KEY || process.env.API_KEY;
+  if (!apiKey) {
+      console.error("Gemini API Key is missing. Please set EXPO_PUBLIC_API_KEY.");
       throw new Error("Gemini API Key is missing. Please check your app configuration.");
   }
-  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+  return new GoogleGenAI({ apiKey });
 };
 
 const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
