@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:geolocator/geolocator.dart';
 import '../models.dart';
 
 String _getEnv(String key, String fallbackValue, {String? altKey}) {
@@ -17,7 +19,6 @@ String _getEnv(String key, String fallbackValue, {String? altKey}) {
   return value;
 }
 
-// Added support for 'key' which is what you named it in Codemagic
 final String _apiKey = _getEnv('GEMINI_API_KEY', 'AIzaSyA4wudATZ2vLf3s-OaZKEEBBv37z7jjnaA', altKey: 'key');
 
 class GeminiService {
@@ -25,15 +26,20 @@ class GeminiService {
   late final GenerativeModel _visionModel;
 
   GeminiService() {
-    if (_apiKey.isEmpty) {
-      print("⚠️ WARNING: GEMINI_API_KEY is missing.");
-    }
-    // gemini-1.5-flash is performant and cheap
-    _model = GenerativeModel(model: 'gemini-1.5-flash', apiKey: _apiKey);
-    _visionModel = GenerativeModel(model: 'gemini-1.5-flash', apiKey: _apiKey);
+    _model = GenerativeModel(model: 'gemini-3-flash-preview', apiKey: _apiKey);
+    _visionModel = GenerativeModel(model: 'gemini-3-flash-preview', apiKey: _apiKey);
   }
 
   String _cleanJson(String text) {
+    try {
+      final startIndex = text.indexOf('{');
+      final endIndex = text.lastIndexOf('}');
+      if (startIndex != -1 && endIndex != -1) {
+        return text.substring(startIndex, endIndex + 1);
+      }
+    } catch (e) {
+      // Fallback
+    }
     return text.replaceAll('```json', '').replaceAll('```', '').trim();
   }
 
@@ -65,17 +71,14 @@ class GeminiService {
   // --- Recipe Generation ---
 
   Future<Recipe> generateRecipeFromText(String prompt, {UserProfile? profile}) async {
-    if (_apiKey.isEmpty) throw Exception("API Key is missing.");
-
     String fullPrompt = 'Create a recipe for: "$prompt".';
     
     if (prompt.toLowerCase().contains('http')) {
-      fullPrompt = 'Analyze this link/video: "$prompt". Extract the recipe from the title, captions, or context. '
-          'If it is a video, use the title to infer the recipe. ';
+      fullPrompt = 'Analyze this link/video: "$prompt". Extract the recipe from the title, captions, or context.';
     } 
 
     fullPrompt += _buildPreferencePrompt(profile);
-    fullPrompt += ' Return strict JSON: $_recipeSchema. Set "author" to "AI Chef".';
+    fullPrompt += ' Return strict JSON: $_recipeSchema. Set "author" to "AI Chef". Do not output markdown.';
 
     try {
       final content = [Content.text(fullPrompt)];
@@ -83,7 +86,8 @@ class GeminiService {
       final text = response.text;
       if (text == null) throw Exception("Empty AI response");
       
-      final data = jsonDecode(_cleanJson(text));
+      final cleanText = _cleanJson(text);
+      final data = jsonDecode(cleanText);
       return _processRecipeResponse(data);
     } catch (e) {
       print('Gemini failed: $e');
@@ -91,10 +95,32 @@ class GeminiService {
     }
   }
 
-  // --- Image to Recipe Flow ---
+  // --- SAFETY CHECK & VISION ---
+
+  /// STRICT validation to ensure image is food.
+  Future<void> _validateImageIsFood(Uint8List imageBytes) async {
+    final prompt = "Is this image a food item, a dish, or a cooking ingredient? Answer only YES or NO.";
+    final content = [
+      Content.multi([
+        TextPart(prompt),
+        DataPart('image/jpeg', imageBytes),
+      ])
+    ];
+
+    final response = await _visionModel.generateContent(content);
+    final text = response.text?.trim().toUpperCase() ?? "NO";
+
+    if (!text.contains("YES")) {
+      throw Exception("Image does not appear to be food. Please upload a valid cooking ingredient or dish.");
+    }
+  }
 
   Future<List<String>> generateOptionsFromImage(Uint8List imageBytes) async {
-    final prompt = 'Look at this food image. Suggest exactly 6 specific, distinct recipe names that could represent this dish. Return ONLY a JSON array of strings. Example: ["Dish A", "Dish B"]';
+    // 1. Validate Image First
+    await _validateImageIsFood(imageBytes);
+
+    // 2. Generate Options
+    final prompt = 'Look at this food image. Suggest exactly 6 specific, distinct recipe names that could represent this dish. Return ONLY a JSON array of strings.';
     
     final content = [
       Content.multi([
@@ -106,9 +132,11 @@ class GeminiService {
     try {
       final response = await _visionModel.generateContent(content);
       final text = response.text ?? '[]';
-      final List<dynamic> list = jsonDecode(_cleanJson(text));
+      final cleanText = _cleanJson(text);
+      final List<dynamic> list = jsonDecode(cleanText);
       return list.map((e) => e.toString()).toList();
     } catch (e) {
+      print("Vision failed: $e");
       return ["Recipe Idea 1", "Recipe Idea 2", "Recipe Idea 3"]; 
     }
   }
@@ -131,11 +159,10 @@ class GeminiService {
     final text = response.text;
     if (text == null) throw Exception("Empty AI response");
 
-    final data = jsonDecode(_cleanJson(text));
+    final cleanText = _cleanJson(text);
+    final data = jsonDecode(cleanText);
     return _processRecipeResponse(data, imageUrlOverride: 'https://loremflickr.com/800/600/food,${selectedOption.replaceAll(' ', '')}');
   }
-
-  // --- Helpers ---
 
   Recipe _processRecipeResponse(Map<String, dynamic> data, {String? imageUrlOverride}) {
       List<dynamic> ingredients = data['ingredients'] ?? [];
@@ -151,13 +178,53 @@ class GeminiService {
     return 'https://loremflickr.com/100/100/$cleanName,food';
   }
 
-  Future<List<dynamic>> findGroceryStores(String ingredient, double lat, double lng) async {
-    await Future.delayed(const Duration(seconds: 1));
-    return [
-      {'name': 'Whole Foods Market', 'address': '1.2 miles away • Open'},
-      {'name': 'Trader Joe\'s', 'address': '2.5 miles away • Open'},
-      {'name': 'Local Farmers Market', 'address': '3.0 miles away • Closes soon'},
-    ];
+  // --- Real Location Services ---
+
+  Future<void> findGroceryStores(String ingredient) async {
+    // 1. Get Real Location
+    try {
+      Position position = await _determinePosition();
+      
+      // 2. Open Real Google Maps Search
+      final query = Uri.encodeComponent("buy $ingredient");
+      final googleMapsUrl = Uri.parse("https://www.google.com/maps/search/$query/@${position.latitude},${position.longitude},14z");
+      
+      if (await canLaunchUrl(googleMapsUrl)) {
+        await launchUrl(googleMapsUrl, mode: LaunchMode.externalApplication);
+      } else {
+        throw 'Could not open maps.';
+      }
+    } catch (e) {
+      print("Location error: $e");
+      // Fallback search without location
+      final query = Uri.encodeComponent("buy $ingredient near me");
+      final url = Uri.parse("https://www.google.com/maps/search/$query");
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Future<Position> _determinePosition() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      return Future.error('Location services are disabled.');
+    }
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        return Future.error('Location permissions are denied');
+      }
+    }
+    
+    if (permission == LocationPermission.deniedForever) {
+      return Future.error('Location permissions are permanently denied.');
+    }
+
+    return await Geolocator.getCurrentPosition();
   }
 
   Future<String> getCookingHelp(String instruction) async {

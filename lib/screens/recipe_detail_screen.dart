@@ -4,6 +4,7 @@ import '../models.dart';
 import '../services/gemini_service.dart';
 import '../services/storage_service.dart';
 import '../services/revenue_cat_service.dart';
+import '../services/supabase_service.dart';
 import 'cooking_mode_screen.dart';
 import '../widgets/review_section.dart';
 import '../widgets/paywall.dart';
@@ -23,9 +24,8 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
   final GeminiService _gemini = GeminiService();
   final StorageService _storage = StorageService();
   final RevenueCatService _rc = RevenueCatService();
+  final SupabaseService _supabase = SupabaseService();
   
-  List<dynamic> _stores = [];
-  bool _loadingStores = false;
   UserProfile? _userProfile;
 
   @override
@@ -42,12 +42,8 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
   }
 
   Future<void> _findStores(String ingredient) async {
-    setState(() => _loadingStores = true);
-    final stores = await _gemini.findGroceryStores(ingredient, 37.77, -122.41);
-    setState(() {
-      _stores = stores;
-      _loadingStores = false;
-    });
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Opening Google Maps for real location data...")));
+    await _gemini.findGroceryStores(ingredient);
   }
 
   Future<void> _deleteRecipe() async {
@@ -58,15 +54,57 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Recipe deleted.')));
     } else {
-      showModalBottomSheet(context: context, builder: (_) => const Paywall());
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const Paywall()));
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Free limit reached. Upgrade to delete more.')));
     }
+  }
+
+  Future<void> _shareToCommunity() async {
+    final controller = TextEditingController();
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Post to Community Feed"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("Share this recipe with everyone!"),
+            const SizedBox(height: 10),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                hintText: "Add a caption (e.g. 'Turned out great!')",
+                border: OutlineInputBorder()
+              ),
+              maxLines: 2,
+            )
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () async {
+              try {
+                await _supabase.shareRecipeToCommunity(_recipe, controller.text);
+                if(mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Posted successfully!")));
+                }
+              } catch(e) {
+                if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+              }
+            }, 
+            child: const Text("Post")
+          )
+        ],
+      )
+    );
   }
 
   Future<void> _addToFolder() async {
     final isPremium = await _rc.isPremium();
     if (!isPremium) {
-       if (mounted) showModalBottomSheet(context: context, builder: (_) => const Paywall());
+       if (mounted) Navigator.push(context, MaterialPageRoute(builder: (_) => const Paywall()));
        return;
     }
 
@@ -97,12 +135,10 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
 
   bool _hasSafetyWarning() {
     if (_userProfile == null) return false;
-    // Simple check: if recipe allergens contains any of user allergies
     for (var allergy in _userProfile!.allergies) {
       if (_recipe.allergens.map((a) => a.toLowerCase()).contains(allergy.toLowerCase())) {
         return true;
       }
-      // Also check ingredients title text
       for (var ing in _recipe.ingredients) {
         if (ing.name.toLowerCase().contains(allergy.toLowerCase())) {
           return true;
@@ -125,6 +161,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
             pinned: true,
             backgroundColor: Colors.black,
             actions: [
+               IconButton(icon: const Icon(LucideIcons.share2), onPressed: _shareToCommunity),
                IconButton(icon: const Icon(LucideIcons.folderInput), onPressed: _addToFolder),
                IconButton(icon: const Icon(LucideIcons.trash2, color: Colors.red), onPressed: _deleteRecipe),
             ],
@@ -159,19 +196,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
                   
                   Text(_recipe.title, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
-                  if (_recipe.tags.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Wrap(
-                        spacing: 6, 
-                        children: _recipe.tags.map((t) => Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(color: const Color(0xFFF3F4F6), borderRadius: BorderRadius.circular(4)),
-                          child: Text(t, style: const TextStyle(fontSize: 10, color: Color(0xFF6B6B6B))),
-                        )).toList()
-                      ),
-                    ),
-
+                  
                   Text(_recipe.description, style: const TextStyle(color: Colors.grey, fontSize: 16)),
                   const SizedBox(height: 20),
                   
@@ -210,21 +235,10 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
                       title: Text(ing.name),
                       subtitle: Text(ing.amount),
                       trailing: IconButton(
-                        icon: const Icon(LucideIcons.mapPin, color: Colors.grey),
+                        icon: const Icon(LucideIcons.mapPin, color: Colors.blue),
                         onPressed: () => _findStores(ing.name),
                       ),
                     )),
-                    if (_loadingStores) const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator())),
-                    if (_stores.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      const Text('Recommended Stores Nearby', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                      const SizedBox(height: 8),
-                      ..._stores.map((s) => ListTile(
-                        leading: const CircleAvatar(backgroundColor: Color(0xFFC9A24D), child: Icon(LucideIcons.shoppingBag, color: Colors.white, size: 16)),
-                        title: Text(s['name']),
-                        subtitle: Text(s['address']),
-                      )),
-                    ]
                   ] else ...[
                      ..._recipe.steps.asMap().entries.map((entry) => ListTile(
                        leading: CircleAvatar(backgroundColor: const Color(0xFF2E2E2E), radius: 12, child: Text('${entry.key + 1}', style: const TextStyle(fontSize: 12, color: Color(0xFFC9A24D)))),
@@ -234,11 +248,9 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
                   ],
 
                   const SizedBox(height: 40),
-                  ReviewSection(
-                    reviews: const [], 
-                    onAddReview: (rating, comment) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Review added!')));
-                    },
+                  const ReviewSection(
+                    reviews: [], 
+                    onAddReview: null, // Placeholder
                   ),
                   const SizedBox(height: 100),
                 ],

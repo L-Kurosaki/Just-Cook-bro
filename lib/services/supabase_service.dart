@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models.dart';
 
@@ -10,6 +12,7 @@ class SupabaseService {
 
   bool get isAuthenticated => _supabase.auth.currentUser != null;
   String? get userId => _supabase.auth.currentUser?.id;
+  User? get currentUser => _supabase.auth.currentUser;
 
   Future<void> signIn(String email, String password) async {
     await _supabase.auth.signInWithPassword(email: email, password: password);
@@ -27,40 +30,81 @@ class SupabaseService {
     await _supabase.auth.signOut();
   }
 
-  // Recipes
-  Future<List<Recipe>> getPublicRecipes() async {
-    // Mocking public recipes if table doesn't exist or is empty for demo
+  // --- PROFILE MANAGEMENT ---
+
+  Future<String> getUserName() async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return "Chef";
+    return user.userMetadata?['full_name'] ?? "Chef";
+  }
+  
+  Future<String?> getUserAvatar() async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return null;
+    return user.userMetadata?['avatar_url'];
+  }
+
+  Future<void> updateProfile({String? name, String? phone}) async {
+    final updates = <String, dynamic>{};
+    if (name != null) updates['full_name'] = name;
+    if (phone != null) updates['phone'] = phone;
+    
+    await _supabase.auth.updateUser(UserAttributes(data: updates));
+  }
+
+  Future<void> uploadAvatar(Uint8List bytes) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+    
+    final fileName = '${user.id}/${DateTime.now().millisecondsSinceEpoch}.jpg';
+    
     try {
-      final response = await _supabase.from('recipes').select().eq('is_public', true).limit(50);
-      return (response as List).map((e) => Recipe.fromJson(e['content'])).toList();
+      await _supabase.storage.from('avatars').uploadBinary(
+        fileName,
+        bytes,
+        fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: true),
+      );
+      
+      final imageUrl = _supabase.storage.from('avatars').getPublicUrl(fileName);
+      await _supabase.auth.updateUser(UserAttributes(data: {'avatar_url': imageUrl}));
     } catch (e) {
-      // Fallback to mock data if Supabase isn't fully set up with tables
-      return [
-        Recipe(
-          title: 'Spicy Basil Chicken',
-          description: 'A quick Thai-inspired stir fry.',
-          prepTime: '10 min',
-          cookTime: '15 min',
-          servings: 2,
-          ingredients: [],
-          steps: [],
-          imageUrl: 'https://images.unsplash.com/photo-1564834724105-918b73d1b9e0?w=800',
-          isPublic: true,
-          author: 'Chef Alex',
-        ),
-        Recipe(
-          title: 'Creamy Mushroom Risotto',
-          description: 'Rich, earthy, and perfectly creamy.',
-          prepTime: '20 min',
-          cookTime: '40 min',
-          servings: 4,
-          ingredients: [],
-          steps: [],
-          imageUrl: 'https://images.unsplash.com/photo-1476124369491-e7addf5db371?w=800',
-          isPublic: true,
-          author: 'Maria C.',
-        )
-      ];
+      print("Upload failed: $e. Ensure 'avatars' bucket exists and is public.");
+      throw Exception("Failed to upload image. Please check network.");
+    }
+  }
+
+  // --- COMMUNITY FEED (REAL DATA) ---
+
+  Future<void> shareRecipeToCommunity(Recipe recipe, String caption) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) throw Exception("Must be logged in");
+
+    // We store the full recipe JSON in a 'content' column
+    await _supabase.from('recipes').insert({
+      'title': recipe.title,
+      'content': recipe.toJson(), // Store full structure
+      'author_id': user.id,
+      'author_name': user.userMetadata?['full_name'] ?? 'Chef',
+      'is_public': true,
+      'caption': caption, // New column for user comments
+      'created_at': DateTime.now().toIso8601String(),
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getCommunityFeed() async {
+    try {
+      // Fetch public recipes, ordered by newest
+      final response = await _supabase
+          .from('recipes')
+          .select()
+          .eq('is_public', true)
+          .order('created_at', ascending: false)
+          .limit(50);
+          
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print("Feed fetch error: $e");
+      return [];
     }
   }
 }

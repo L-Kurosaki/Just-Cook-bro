@@ -1,4 +1,4 @@
-# Just Cook Bro (Flutter Edition)
+# Just Cook Bro (Flutter Edition) v1.0.1
 
 Just Cook Bro is a smart cooking assistant rebuilt with Flutter.
 

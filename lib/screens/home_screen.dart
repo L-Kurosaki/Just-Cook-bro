@@ -3,6 +3,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../models.dart';
 import '../services/storage_service.dart';
 import '../services/revenue_cat_service.dart';
+import '../services/supabase_service.dart';
 import 'recipe_detail_screen.dart';
 import 'add_recipe_screen.dart';
 import '../widgets/logo.dart';
@@ -20,11 +21,13 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Recipe> _filteredRecipes = [];
   List<Folder> _folders = [];
   String? _selectedFolderId;
-  String? _activeFilterTag; 
+  String? _activeFilterTag;
+  String _userName = "Chef";
   
   bool _isLoading = true;
   final StorageService _storage = StorageService();
   final RevenueCatService _rcService = RevenueCatService();
+  final SupabaseService _supabase = SupabaseService();
 
   @override
   void initState() {
@@ -34,11 +37,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
+    
+    // Load local recipes
     final recipes = await _storage.getRecipes();
     final folders = await _storage.getFolders();
+    
+    // Load Real User Name
+    final name = await _supabase.getUserName();
+
     setState(() {
       _allRecipes = recipes;
       _folders = folders;
+      _userName = name;
       _filterRecipes();
       _isLoading = false;
     });
@@ -54,11 +64,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Filter by Tag
     if (_activeFilterTag != null) {
-      if (_activeFilterTag == 'My Recipes') {
-         // Maybe logic for authored recipes
-      } else {
          temp = temp.where((r) => r.tags.contains(_activeFilterTag) || r.title.contains(_activeFilterTag!)).toList();
-      }
     }
 
     setState(() {
@@ -70,8 +76,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final isPremium = await _rcService.isPremium();
     
     if (!isPremium) {
-       // Lock folder creation for basic users
-       if (mounted) showModalBottomSheet(context: context, builder: (_) => const Paywall());
+       if (mounted) Navigator.push(context, MaterialPageRoute(builder: (_) => const Paywall()));
        return;
     }
 
@@ -156,16 +161,19 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Kitchen Chaos? Not today.', style: TextStyle(color: Color(0xFF2E2E2E), fontWeight: FontWeight.bold, fontSize: 22)),
-            Text('Let\'s make something delicious.', style: TextStyle(color: Colors.grey, fontSize: 14)),
+            // Dynamic Name
+            Text('Hi $_userName,', style: const TextStyle(color: Color(0xFF2E2E2E), fontWeight: FontWeight.bold, fontSize: 22)),
+            const Text('Let\'s cook something real.', style: TextStyle(color: Colors.grey, fontSize: 14)),
           ],
         ),
         actions: [
           IconButton(icon: const Icon(LucideIcons.filter, color: Color(0xFF2E2E2E)), onPressed: _showFilterSheet),
-          IconButton(icon: const Icon(LucideIcons.bell, color: Color(0xFF2E2E2E)), onPressed: () {}),
+          IconButton(icon: const Icon(LucideIcons.crown, color: Color(0xFFC9A24D)), onPressed: () {
+             Navigator.push(context, MaterialPageRoute(builder: (_) => const Paywall()));
+          }),
         ],
       ),
       body: _isLoading
@@ -265,18 +273,17 @@ class _HomeScreenState extends State<HomeScreen> {
             Text(
               _activeFilterTag != null 
                   ? 'No recipes found for "$_activeFilterTag".' 
-                  : 'Your kitchen is quiet... too quiet.', 
+                  : 'Your kitchen is quiet.', 
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF2E2E2E))
             ),
             const SizedBox(height: 8),
             const Text(
-              "Start by adding a recipe. Paste a link, take a photo, or just type an idea!",
+              "Start by adding a recipe. We verify images to ensure only real food makes it in.",
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey),
             ),
             const SizedBox(height: 24),
-            if (_selectedFolderId == null)
             ElevatedButton(
               onPressed: () async {
                  await Navigator.push(context, MaterialPageRoute(builder: (_) => const AddRecipeScreen()));
@@ -287,7 +294,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
               ),
-              child: const Text('Let\'s Cook!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              child: const Text('Add Recipe', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -353,19 +360,14 @@ class RecipeCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 6),
-                  if (recipe.tags.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Wrap(
-                        spacing: 4,
-                        children: recipe.tags.take(3).map((t) => Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.grey.shade300)),
-                          child: Text(t, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                        )).toList(),
-                      ),
-                    ),
                   
+                  // Author Info if available
+                  if (recipe.author != null)
+                     Padding(
+                       padding: const EdgeInsets.only(bottom: 6.0),
+                       child: Text("by ${recipe.author}", style: const TextStyle(fontSize: 12, color: Color(0xFFC9A24D), fontStyle: FontStyle.italic)),
+                     ),
+
                   Text(recipe.description, style: const TextStyle(color: Color(0xFF6B6B6B), fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 12),
                   Row(
