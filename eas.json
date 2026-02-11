@@ -21,7 +21,7 @@
     "production": {
       "autoIncrement": true,
       "cache": {
-        "key": "fresh-build-v1"
+        "key": "fresh-build-v2"
       },
       "android": {
         "buildType": "apk",

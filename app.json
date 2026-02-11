@@ -51,14 +51,6 @@
         {
           "microphonePermission": "The app accesses your microphone for voice commands during cooking."
         }
-      ],
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "usesCleartextTraffic": true
-          }
-        }
       ]
     ]
   }
