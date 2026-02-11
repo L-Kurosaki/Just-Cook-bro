@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../services/supabase_service.dart';
 import 'main_screen.dart';
+import '../widgets/logo.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -60,18 +61,8 @@ class _AuthScreenState extends State<AuthScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFC9A24D).withOpacity(0.1),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFFC9A24D).withOpacity(0.3), width: 3)
-                ),
-                child: const Icon(LucideIcons.chefHat, size: 50, color: Color(0xFFC9A24D)),
-              ),
-              const SizedBox(height: 16),
-              const Text('Just Cook Bro', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF2E2E2E))),
+              // Use consistent Logo widget
+              const Logo(size: 120, showText: true),
               const SizedBox(height: 40),
               
               Container(

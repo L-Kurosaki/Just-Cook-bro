@@ -1,1 +1,9 @@
-# DELETED
+# Configuration for Netlify Hosting (Free Tier)
+
+# This rewrite rule is essential for Flutter Web.
+# It ensures that when you refresh a page (like /recipe/123), 
+# it doesn't give a 404 error but reloads the app.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
