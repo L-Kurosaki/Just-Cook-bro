@@ -20,6 +20,9 @@
     },
     "production": {
       "autoIncrement": true,
+      "cache": {
+        "key": "fresh-build-v1"
+      },
       "android": {
         "buildType": "apk",
         "image": "latest"
