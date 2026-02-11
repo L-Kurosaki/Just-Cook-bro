@@ -6,9 +6,10 @@ import { Recipe, Step, StoreLocation } from "../types";
 // Initialize Gemini Client Lazily
 const getGemini = () => {
   const apiKey = process.env.EXPO_PUBLIC_API_KEY || process.env.API_KEY;
-  if (!apiKey) {
-      console.error("Gemini API Key is missing. Please set EXPO_PUBLIC_API_KEY.");
-      throw new Error("Gemini API Key is missing. Please check your app configuration.");
+  if (!apiKey || apiKey.includes("YOUR_API_KEY")) {
+      console.error("Gemini API Key is missing. Please set EXPO_PUBLIC_API_KEY in .env or EAS Secrets.");
+      // This error will be caught by the UI and shown in an Alert
+      throw new Error("API Key Missing. Please check EAS Secrets or .env file.");
   }
   return new GoogleGenAI({ apiKey });
 };
@@ -315,7 +316,7 @@ export const suggestRecipesFromImage = async (base64Image: string, allergies: st
             const resWrapped = await callOpenAI(system, user, base64Image, true);
             return resWrapped.suggestions || [];
         } catch (openAiError) {
-             throw new Error("Both AI services failed to analyze the image.");
+             throw new Error("Both AI services failed to analyze the image. Check your API Key.");
         }
     }
 };

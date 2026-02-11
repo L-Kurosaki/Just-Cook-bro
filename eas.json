@@ -13,13 +13,16 @@
         "buildType": "apk"
       },
       "ios": {
-        "simulator": true
+        "simulator": true"
       }
     },
     "production": {
       "autoIncrement": true,
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_KEY": "YOUR_API_KEY_HERE_IF_NOT_USING_EAS_SECRETS"
       }
     }
   },
