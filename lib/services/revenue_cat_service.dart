@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'package:purchases_ui_flutter/purchases_ui_flutter.dart';
 
-// User provided test key
-const String _apiKey = 'test_BekbchnDGoHXuZwUveusGAGnaZc';
-const String _entitlementId = 'pro'; // Mapping "Just Cook Bro Pro" to the ID 'pro'
+// Strictly use the key from the build environment
+const String _apiKey = String.fromEnvironment('RC_GOOGLE_KEY');
+const String _entitlementId = 'pro'; 
 
 class RevenueCatService {
   static final RevenueCatService _instance = RevenueCatService._internal();
@@ -18,7 +18,12 @@ class RevenueCatService {
   Future<void> init() async {
     if (_isInitialized) return;
 
-    // Web is not supported by purchases_flutter in the same way as mobile for this demo context
+    // Check if key is missing
+    if (_apiKey.isEmpty) {
+      print("⚠️ RevenueCat Error: RC_GOOGLE_KEY is missing.");
+      return;
+    }
+
     if (kIsWeb) {
       print("RevenueCat Web configuration required.");
       return;
@@ -32,18 +37,16 @@ class RevenueCatService {
       PurchasesConfiguration configuration = PurchasesConfiguration(_apiKey);
       await Purchases.configure(configuration);
       _isInitialized = true;
-      print("RevenueCat initialized with key: $_apiKey");
+      print("RevenueCat initialized successfully");
     } catch (e) {
       print("Failed to init RevenueCat: $e");
     }
   }
 
-  /// Check if the user has the 'pro' entitlement (Just Cook Bro Pro)
   Future<bool> isPremium() async {
     if (!_isInitialized) return false;
     try {
       CustomerInfo customerInfo = await Purchases.getCustomerInfo();
-      // Checking for 'pro' entitlement. Ensure this matches your RevenueCat dashboard.
       return customerInfo.entitlements.all[_entitlementId]?.isActive ?? false;
     } catch (e) {
       print("Error checking premium status: $e");
@@ -51,22 +54,17 @@ class RevenueCatService {
     }
   }
 
-  /// Display the RevenueCat Paywall natively
-  /// Returns true if the user purchased or restored successfully
   Future<bool> showPaywall(BuildContext context) async {
-    if (!_isInitialized) return false;
+    if (!_isInitialized) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Billing not configured")));
+      return false;
+    }
 
     try {
-      // Present the Paywall. The handler returns only after dismissal.
-      // We check status afterwards.
       final paywallResult = await RevenueCatUI.presentPaywallIfNeeded(_entitlementId);
-      
-      // If the paywall was presented and action taken, or if already pro:
       if (paywallResult == PaywallResult.purchased || paywallResult == PaywallResult.restored) {
         return true;
       }
-      
-      // Double check status manually
       return await isPremium();
     } catch (e) {
       print("Error showing paywall: $e");
@@ -74,7 +72,6 @@ class RevenueCatService {
     }
   }
 
-  /// Show the Customer Center for managing subscriptions
   Future<void> showCustomerCenter() async {
     if (!_isInitialized) return;
     try {
@@ -84,7 +81,6 @@ class RevenueCatService {
     }
   }
 
-  /// Manually restore purchases if needed (Customer Center handles this usually)
   Future<void> restorePurchases() async {
     if (!_isInitialized) return;
     try {

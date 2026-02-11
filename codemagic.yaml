@@ -5,20 +5,23 @@ workflows:
     instance_type: mac_mini_m1
     environment:
       flutter: stable
-      # We removed the 'vars' section here. 
-      # Now, Codemagic will look for API_KEY, SUPABASE_URL, etc., 
-      # in the "Environment variables" tab of your project settings.
     scripts:
+      - name: Validate Environment Variables
+        script: |
+          # This script checks if your Codemagic variables are set correctly
+          if [ -z "$API_KEY" ]; then echo "❌ Error: API_KEY is missing in Codemagic"; exit 1; fi
+          if [ -z "$SUPABASE_URL" ]; then echo "❌ Error: SUPABASE_URL is missing in Codemagic"; exit 1; fi
+          if [ -z "$SUPABASE_ANON_KEY" ]; then echo "❌ Error: SUPABASE_ANON_KEY is missing in Codemagic"; exit 1; fi
+          if [ -z "$RC_GOOGLE_KEY" ]; then echo "❌ Error: RC_GOOGLE_KEY is missing in Codemagic"; exit 1; fi
+          echo "✅ All API keys are present."
       - name: Get dependencies
         script: flutter pub get
       - name: Build Android APK
         script: |
-          # The $SIGN before the variable name tells the script to pull 
-          # the value from your Codemagic Environment Variables.
           flutter build apk --release \
-            --dart-define=API_KEY=$API_KEY \
-            --dart-define=SUPABASE_URL=$SUPABASE_URL \
-            --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY \
-            --dart-define=RC_GOOGLE_KEY=$RC_GOOGLE_KEY
+            --dart-define=API_KEY="$API_KEY" \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            --dart-define=RC_GOOGLE_KEY="$RC_GOOGLE_KEY"
     artifacts:
       - build/app/outputs/flutter-apk/app-release.apk
