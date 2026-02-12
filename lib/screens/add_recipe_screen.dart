@@ -7,6 +7,7 @@ import '../services/storage_service.dart';
 import '../services/revenue_cat_service.dart';
 import '../models.dart';
 import '../widgets/paywall.dart';
+import 'cooking_mode_screen.dart';
 
 class AddRecipeScreen extends StatefulWidget {
   const AddRecipeScreen({super.key});
@@ -65,7 +66,7 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> with SingleTickerProv
           _textController.text, 
           profile: _userProfile
         );
-        await _saveAndExit(recipe);
+        await _handleGeneratedRecipe(recipe);
       } catch (e) {
         _showError(e.toString());
       } finally {
@@ -113,23 +114,89 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> with SingleTickerProv
         _selectedImage!,
         profile: _userProfile
       );
-      await _saveAndExit(recipe);
+      await _handleGeneratedRecipe(recipe);
     } catch (e) {
        _showError(e.toString());
        setState(() => _loading = false);
     }
   }
 
-  Future<void> _saveAndExit(Recipe recipe) async {
+  Future<void> _handleGeneratedRecipe(Recipe recipe) async {
+    // 1. Save locally first
     bool saved = await _storage.saveRecipe(recipe);
     if (!saved) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Limit Reached. Upgrade to add more.")));
         showModalBottomSheet(context: context, builder: (_) => const Paywall());
       }
-    } else {
-      if (mounted) Navigator.pop(context);
+      return;
     }
+
+    if (!mounted) return;
+
+    // 2. Ask User: Cook Now or Later?
+    await showModalBottomSheet(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(LucideIcons.checkCircle, size: 48, color: Colors.green),
+              const SizedBox(height: 16),
+              const Text("Recipe Ready!", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              const Text("What would you like to do?", style: TextStyle(color: Colors.grey)),
+              const SizedBox(height: 24),
+              
+              // Option A: Cook Now
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx); // Close Sheet
+                    Navigator.pushReplacement(
+                      context, 
+                      MaterialPageRoute(builder: (_) => CookingModeScreen(recipe: recipe))
+                    );
+                  }, 
+                  icon: const Icon(LucideIcons.flame, color: Colors.white),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFC9A24D),
+                    padding: const EdgeInsets.symmetric(vertical: 16)
+                  ),
+                  label: const Text("Cook Now", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold))
+                ),
+              ),
+              const SizedBox(height: 12),
+              
+              // Option B: Cook Later (Add to Shopping List)
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    await _storage.addIngredientsToShop(recipe.ingredients);
+                    if(mounted) {
+                      Navigator.pop(ctx); // Close Sheet
+                      Navigator.pop(context); // Close Add Screen
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Ingredients added to Shopping List!")));
+                    }
+                  }, 
+                  icon: const Icon(LucideIcons.shoppingBag, color: Colors.black),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16)
+                  ),
+                  label: const Text("Cook Later (Add to Shop List)", style: TextStyle(color: Colors.black, fontSize: 16))
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+    );
   }
 
   void _showError(String err) {

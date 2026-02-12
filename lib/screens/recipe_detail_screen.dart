@@ -46,7 +46,6 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
     });
   }
 
-  // UPDATED: In-App Store Finder
   Future<void> _findStores(String ingredient) async {
     showModalBottomSheet(
       context: context, 
@@ -185,7 +184,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
   }
 
   bool _hasSafetyWarning() {
-    if (_recipe.allergens.isNotEmpty) return true; // Always warn if allergens exist
+    if (_recipe.allergens.isNotEmpty) return true;
     if (_userProfile == null) return false;
     for (var allergy in _userProfile!.allergies) {
       if (_recipe.allergens.map((a) => a.toLowerCase()).contains(allergy.toLowerCase())) {
@@ -193,6 +192,18 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
       }
     }
     return false;
+  }
+
+  Future<void> _startCooking() async {
+    // NOTIFICATION LOGIC: Always send if Author exists.
+    // The recipient (the author) will experience censorship in their app if they are Basic.
+    // We do NOT censor the *sending* process anymore.
+    if (_recipe.authorId != null && _recipe.authorId != _supabase.userId) {
+       _supabase.notifyAuthor(_recipe.authorId!, 'cook', "is cooking your '${_recipe.title}'!");
+    }
+
+    if (!mounted) return;
+    Navigator.push(context, MaterialPageRoute(builder: (_) => CookingModeScreen(recipe: _recipe)));
   }
 
   @override
@@ -229,7 +240,6 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // UPDATED: Prominent Allergy Warning
                   if (unsafe)
                     Container(
                       margin: const EdgeInsets.only(bottom: 20),
@@ -256,7 +266,6 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
                   Text(_recipe.title, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   
-                  // UPDATED: Attribution
                   if (_recipe.sourceUrl != null && _recipe.sourceUrl!.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8.0),
@@ -275,7 +284,6 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
                   Text(_recipe.description, style: const TextStyle(color: Colors.grey, fontSize: 16)),
                   const SizedBox(height: 20),
                   
-                  // Stats
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -286,7 +294,6 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
                   ),
                   const SizedBox(height: 24),
 
-                  // Tabs
                   TabBar(
                     controller: _tabController,
                     labelColor: const Color(0xFFC9A24D),
@@ -296,7 +303,6 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
                   ),
                   const SizedBox(height: 20),
 
-                  // Tab View Content (Inline for Sliver)
                   if (_tabController.index == 0) ...[
                     ..._recipe.ingredients.map((ing) => ListTile(
                       contentPadding: const EdgeInsets.symmetric(vertical: 8),
@@ -327,9 +333,8 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
                   ],
 
                   const SizedBox(height: 40),
-                  // FIXED: Build Error (onAddReview is no longer null)
                   ReviewSection(
-                    reviews: const [], // In a real app, fetch from Supabase based on Recipe ID
+                    reviews: const [], 
                     isPremium: _isPremium,
                     onAddReview: (rating, comment) {
                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Thanks for your review!")));
@@ -356,7 +361,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
                     onPressed: () {
                       Navigator.pop(ctx);
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => CookingModeScreen(recipe: _recipe)));
+                      _startCooking();
                     },
                     child: const Text("I Understand", style: TextStyle(color: Colors.white))
                   )
@@ -364,7 +369,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
               )
             );
           } else {
-             Navigator.push(context, MaterialPageRoute(builder: (_) => CookingModeScreen(recipe: _recipe)));
+             _startCooking();
           }
         },
         backgroundColor: unsafe ? Colors.red : const Color(0xFFC9A24D),

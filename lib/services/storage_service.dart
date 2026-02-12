@@ -8,6 +8,7 @@ class StorageService {
   static const String _foldersKey = 'jcb_folders';
   static const String _profileKey = 'jcb_profile';
   static const String _deleteCountKey = 'jcb_delete_count'; // Track number of deletions
+  static const String _shoppingKey = 'jcb_shopping';
 
   // --- Recipes ---
 
@@ -31,11 +32,12 @@ class StorageService {
     
     final prefs = await SharedPreferences.getInstance();
     
-    // Update or Add
+    // Check if recipe already exists
     final index = recipes.indexWhere((r) => r.id == recipe.id);
     if (index >= 0) {
       recipes[index] = recipe;
     } else {
+      // Add to top
       recipes.insert(0, recipe);
     }
     
@@ -105,20 +107,8 @@ class StorageService {
     // Remove the folder
     folders.removeWhere((f) => f.id == id);
     
-    // Optional: Reset recipes in that folder to have no folder (or delete them? Usually reset)
+    // Reset recipes in that folder
     List<Recipe> recipes = await getRecipes();
-    bool recipesChanged = false;
-    for (int i = 0; i < recipes.length; i++) {
-      if (recipes[i].folderId == id) {
-        recipes[i] = recipes[i].copyWith(folderId: null); // Reset using named argument logic manually if copyWith was strict, but here null is fine if logic supports it. 
-        // Note: Our copyWith uses `folderId ?? this.folderId`, so passing null usually keeps old value.
-        // We need a specific way to clear it.
-        // Let's reload recipe logic below to clear it.
-      }
-    }
-    
-    // Actually, simpler approach for the Recipe copyWith update:
-    // We will iterate and rebuild because standard copyWith null-coalescing prevents unsetting.
     final updatedRecipes = recipes.map((r) {
       if (r.folderId == id) {
         return Recipe(
@@ -147,6 +137,30 @@ class StorageService {
 
     await prefs.setString(_foldersKey, jsonEncode(folders.map((e) => e.toJson()).toList()));
     await prefs.setString(_recipesKey, jsonEncode(updatedRecipes.map((e) => e.toJson()).toList()));
+  }
+
+  // --- Shopping List ---
+
+  Future<void> addIngredientsToShop(List<Ingredient> ingredients) async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? data = prefs.getString(_shoppingKey);
+    List<ShopItem> currentItems = [];
+    
+    if (data != null) {
+      final List<dynamic> json = jsonDecode(data);
+      currentItems = json.map((e) => ShopItem.fromJson(e)).toList();
+    }
+
+    // Add new ingredients
+    for (var ing in ingredients) {
+      // Simple logic: add if not exact duplicate text
+      final text = "${ing.amount} ${ing.name}";
+      if (!currentItems.any((item) => item.text == text)) {
+        currentItems.add(ShopItem(id: DateTime.now().millisecondsSinceEpoch.toString() + ing.name, text: text));
+      }
+    }
+
+    await prefs.setString(_shoppingKey, jsonEncode(currentItems.map((e) => e.toJson()).toList()));
   }
 
   // --- Profile ---

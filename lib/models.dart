@@ -80,6 +80,7 @@ class Recipe {
   final bool isOffline;
   final bool isPublic;
   final String? author;
+  final String? authorId; // New: Tracks original creator UUID
   final String? sourceUrl; // New: For attribution
   final int? rating;
   final String? folderId; 
@@ -100,6 +101,7 @@ class Recipe {
     this.isOffline = false,
     this.isPublic = false,
     this.author,
+    this.authorId,
     this.sourceUrl,
     this.rating,
     this.folderId,
@@ -126,6 +128,7 @@ class Recipe {
       isOffline: json['isOffline'] ?? false,
       isPublic: json['isPublic'] ?? false,
       author: json['author'],
+      authorId: json['authorId'],
       sourceUrl: json['sourceUrl'],
       rating: json['rating'],
       folderId: json['folderId'],
@@ -148,6 +151,7 @@ class Recipe {
     'isOffline': isOffline,
     'isPublic': isPublic,
     'author': author,
+    'authorId': authorId,
     'sourceUrl': sourceUrl,
     'rating': rating,
     'folderId': folderId,
@@ -155,7 +159,7 @@ class Recipe {
     'allergens': allergens,
   };
   
-  Recipe copyWith({String? folderId}) {
+  Recipe copyWith({String? folderId, String? authorId}) {
     return Recipe(
       id: id,
       title: title,
@@ -170,6 +174,7 @@ class Recipe {
       isOffline: isOffline,
       isPublic: isPublic,
       author: author,
+      authorId: authorId ?? this.authorId,
       sourceUrl: sourceUrl,
       rating: rating,
       folderId: folderId ?? this.folderId,
@@ -291,7 +296,7 @@ class AppNotification {
     required this.type,
     required this.message,
     required this.date,
-    this.read = false,
+    this.read = false,  
   });
 
   factory AppNotification.fromJson(Map<String, dynamic> json) {

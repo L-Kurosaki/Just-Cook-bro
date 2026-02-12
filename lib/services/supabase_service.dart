@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models.dart';
+import 'revenue_cat_service.dart';
 
 class SupabaseService {
   static final SupabaseService _instance = SupabaseService._internal();
@@ -78,38 +79,110 @@ class SupabaseService {
     }
   }
 
-  // --- COMMUNITY FEED (REAL DATA) ---
+  // --- COMMUNITY FEED (REAL TIME) ---
 
-  Future<void> shareRecipeToCommunity(Recipe recipe, String caption) async {
+  Future<void> shareRecipeToCommunity(Recipe recipe, String caption, {List<SpotifyTrack>? musicSession}) async {
     final user = _supabase.auth.currentUser;
     if (user == null) throw Exception("Must be logged in");
 
-    // We store the full recipe JSON in a 'content' column
+    final isPremium = await RevenueCatService().isPremium();
+
+    final recipeJson = recipe.toJson();
+    if (musicSession != null && musicSession.isNotEmpty) {
+      recipeJson['musicSession'] = musicSession.map((e) => e.toJson()).toList();
+    }
+
+    // Insert with premium status so we can highlight them in the feed
     await _supabase.from('recipes').insert({
       'title': recipe.title,
-      'content': recipe.toJson(), // Store full structure
+      'content': recipeJson,
       'author_id': user.id,
       'author_name': user.userMetadata?['full_name'] ?? 'Chef',
+      'author_is_premium': isPremium, // NEW: Track if author is gold
       'is_public': true,
-      'caption': caption, // New column for user comments
+      'caption': caption,
+      'comments': [], 
+      'likes': 0,
       'created_at': DateTime.now().toIso8601String(),
     });
   }
 
-  Future<List<Map<String, dynamic>>> getCommunityFeed() async {
+  Stream<List<Map<String, dynamic>>> getCommunityFeedStream() {
+    return _supabase
+        .from('recipes')
+        .stream(primaryKey: ['id'])
+        .eq('is_public', true)
+        .order('created_at', ascending: false)
+        .map((data) => List<Map<String, dynamic>>.from(data));
+  }
+
+  // --- INTERACTIONS & NOTIFICATIONS ---
+
+  Future<void> notifyAuthor(String targetUserId, String type, String message) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null || user.id == targetUserId) return; // Don't notify self
+
+    final triggerName = user.userMetadata?['full_name'] ?? 'Someone';
+
     try {
-      // Fetch public recipes, ordered by newest
-      final response = await _supabase
-          .from('recipes')
-          .select()
-          .eq('is_public', true)
-          .order('created_at', ascending: false)
-          .limit(50);
-          
-      return List<Map<String, dynamic>>.from(response);
+      await _supabase.from('notifications').insert({
+        'user_id': targetUserId, // Who gets the alert
+        'type': type, // 'save', 'cook', 'review'
+        'message': message, // Full message (Frontend decides whether to censor based on Premium)
+        'trigger_user': triggerName, // Store who caused it
+        'created_at': DateTime.now().toIso8601String(),
+        'is_read': false,
+      });
     } catch (e) {
-      print("Feed fetch error: $e");
-      return [];
+      print("Notification error: $e");
     }
+  }
+  
+  // New: Get Notifications for the logged-in user
+  Stream<List<AppNotification>> getNotificationsStream() {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return Stream.value([]);
+
+    return _supabase
+        .from('notifications')
+        .stream(primaryKey: ['id'])
+        .eq('user_id', userId)
+        .order('created_at', ascending: false)
+        .map((data) => data.map((e) => AppNotification.fromJson(e)).toList());
+  }
+
+  Future<void> addCommentOrRating(String recipeId, String recipeAuthorId, int rating, String? comment) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+
+    final userName = user.userMetadata?['full_name'] ?? 'Chef';
+
+    // 1. Fetch current comments
+    final data = await _supabase.from('recipes').select('comments').eq('id', recipeId).single();
+    List current = data['comments'] ?? [];
+
+    // 2. Add new interaction
+    final newInteraction = {
+      'user_id': user.id,
+      'user_name': userName,
+      'rating': rating,
+      'comment': comment ?? "",
+      'date': DateTime.now().toIso8601String(),
+    };
+    
+    current.add(newInteraction);
+
+    // 3. Update DB
+    await _supabase.from('recipes').update({'comments': current}).eq('id', recipeId);
+
+    // 4. Notify Author
+    // We send the generic message type. The details (like "User X") are handled by notifyAuthor logic
+    String notifMsg = "rated your recipe $rating stars";
+    if (comment != null && comment.isNotEmpty) {
+      notifMsg += " and commented: \"$comment\"";
+    }
+    
+    // Pass the action suffix. The notification screen will reconstruct "TriggerUser + suffix" or "Someone + suffix"
+    await notifyAuthor(recipeAuthorId, 'review', notifMsg);
   }
 }

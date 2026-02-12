@@ -4,6 +4,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../models.dart';
 import '../services/gemini_service.dart';
 import '../services/spotify_service.dart';
+import '../services/supabase_service.dart';
 
 class CookingModeScreen extends StatefulWidget {
   final Recipe recipe;
@@ -19,8 +20,12 @@ class _CookingModeScreenState extends State<CookingModeScreen> {
   int _timeLeft = 0;
   bool _timerRunning = false;
   String? _aiTip;
+  
+  // Music Tracking
   SpotifyTrack? _currentTrack;
   final SpotifyService _spotify = SpotifyService();
+  final Set<String> _playedTrackUris = {};
+  final List<SpotifyTrack> _sessionHistory = [];
 
   @override
   void initState() {
@@ -32,8 +37,18 @@ class _CookingModeScreenState extends State<CookingModeScreen> {
   void _checkMusic() async {
     Timer.periodic(const Duration(seconds: 10), (t) async {
        if (!mounted) return t.cancel();
+       
        final track = await _spotify.getCurrentlyPlaying("mock_token");
-       setState(() => _currentTrack = track);
+       if (track != null) {
+         setState(() {
+           _currentTrack = track;
+           // Add to history if unique
+           if (!_playedTrackUris.contains(track.uri)) {
+             _playedTrackUris.add(track.uri);
+             _sessionHistory.add(track);
+           }
+         });
+       }
     });
   }
 
@@ -44,8 +59,116 @@ class _CookingModeScreenState extends State<CookingModeScreen> {
         _resetTimer();
       });
     } else {
-      Navigator.popUntil(context, (route) => route.isFirst);
+      _finishCooking();
     }
+  }
+
+  void _finishCooking() {
+    // Show Completion Dialog
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => _buildCompletionDialog(ctx)
+    );
+  }
+
+  Widget _buildCompletionDialog(BuildContext dialogContext) {
+    final commentController = TextEditingController();
+    bool shareMusic = true;
+
+    return StatefulBuilder(
+      builder: (context, setState) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 24, right: 24, top: 24, 
+            bottom: MediaQuery.of(context).viewInsets.bottom + 24
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Center(child: Icon(LucideIcons.partyPopper, size: 48, color: Color(0xFFC9A24D))),
+              const SizedBox(height: 16),
+              const Center(child: Text("Bon Appétit!", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold))),
+              const Center(child: Text("You cooked it! Share your triumph?", style: TextStyle(color: Colors.grey))),
+              const SizedBox(height: 24),
+              
+              // User Expression
+              const Text("What did you think?", style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: commentController,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  hintText: "Review, tips, or modifications...",
+                  filled: true,
+                  fillColor: const Color(0xFFF3F4F6),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Music Toggle
+              if (_sessionHistory.isNotEmpty)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text("Include Cooking Soundtrack"),
+                  subtitle: Text("${_sessionHistory.length} songs tracked"),
+                  value: shareMusic,
+                  activeColor: const Color(0xFFC9A24D),
+                  onChanged: (val) => setState(() => shareMusic = val ?? true),
+                ),
+
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.pop(dialogContext); // Close sheet
+                        Navigator.pop(context); // Close cooking screen
+                      },
+                      style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+                      child: const Text("Keep Private", style: TextStyle(color: Colors.black)),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        try {
+                          await SupabaseService().shareRecipeToCommunity(
+                            widget.recipe, 
+                            commentController.text,
+                            musicSession: shareMusic ? _sessionHistory : null
+                          );
+                          if (mounted) {
+                            Navigator.pop(dialogContext);
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Posted to Feed!")));
+                          }
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFC9A24D),
+                        padding: const EdgeInsets.symmetric(vertical: 16)
+                      ),
+                      child: const Text("Post to Feed", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              )
+            ],
+          ),
+        );
+      }
+    );
   }
 
   void _resetTimer() {
