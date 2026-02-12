@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import '../models.dart'; // Ensure Review model is in models.dart
+import '../models.dart';
+import 'paywall.dart';
 
-// Add Review model if missing in models.dart or use dynamic
 class ReviewSection extends StatefulWidget {
-  final List<dynamic> reviews; // Using dynamic to be safe, ideally List<Review>
+  final List<dynamic> reviews;
   final Function(int rating, String comment) onAddReview;
+  final bool isPremium; // New control
 
-  const ReviewSection({super.key, required this.reviews, required this.onAddReview});
+  const ReviewSection({
+    super.key, 
+    required this.reviews, 
+    required this.onAddReview,
+    required this.isPremium,
+  });
 
   @override
   State<ReviewSection> createState() => _ReviewSectionState();
@@ -18,8 +24,12 @@ class _ReviewSectionState extends State<ReviewSection> {
   final _commentController = TextEditingController();
 
   void _submit() {
-    if (_rating > 0 && _commentController.text.isNotEmpty) {
-      widget.onAddReview(_rating, _commentController.text);
+    if (_rating > 0) {
+      // Basic users: Comment is empty string
+      // Premium users: Comment is text
+      String comment = widget.isPremium ? _commentController.text : "";
+      
+      widget.onAddReview(_rating, comment);
       setState(() {
         _rating = 0;
         _commentController.clear();
@@ -51,8 +61,10 @@ class _ReviewSectionState extends State<ReviewSection> {
                   Row(children: List.generate(5, (i) => Icon(LucideIcons.star, size: 12, color: i < (r['rating'] ?? 0) ? const Color(0xFFC9A24D) : Colors.grey))),
                 ],
               ),
-              const SizedBox(height: 4),
-              Text(r['comment'] ?? ''),
+              if (r['comment'] != null && r['comment'].toString().isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(r['comment'] ?? ''),
+              ]
             ],
           ),
         )),
@@ -79,15 +91,40 @@ class _ReviewSectionState extends State<ReviewSection> {
                 }),
               ),
               const SizedBox(height: 12),
-              TextField(
-                controller: _commentController,
-                decoration: InputDecoration(
-                  hintText: 'Share your thoughts...',
-                  filled: true,
-                  fillColor: const Color(0xFFF3F4F6),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              
+              if (widget.isPremium)
+                TextField(
+                  controller: _commentController,
+                  decoration: InputDecoration(
+                    hintText: 'Share your thoughts...',
+                    filled: true,
+                    fillColor: const Color(0xFFF3F4F6),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  ),
+                )
+              else
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const Paywall()));
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF3F4F6),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(LucideIcons.lock, size: 16, color: Colors.grey),
+                        SizedBox(width: 8),
+                        Text("Upgrade to add comments", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
@@ -97,7 +134,10 @@ class _ReviewSectionState extends State<ReviewSection> {
                     backgroundColor: const Color(0xFFC9A24D),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text('Post Review', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  child: Text(
+                     widget.isPremium ? 'Post Review' : 'Submit Rating Only', 
+                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
+                  ),
                 ),
               )
             ],

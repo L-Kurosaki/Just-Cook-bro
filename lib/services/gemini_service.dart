@@ -47,10 +47,10 @@ class GeminiService {
     if (profile == null) return "";
     String p = "";
     if (profile.dietaryPreferences.isNotEmpty) {
-      p += " IMPORTANT: The user follows these diets: ${profile.dietaryPreferences.join(', ')}. Ensure the recipe strictly adheres to them.";
+      p += " CRITICAL REQUIREMENT: The user strictly follows these diets: ${profile.dietaryPreferences.join(', ')}. The recipe MUST adhere to this.";
     }
     if (profile.allergies.isNotEmpty) {
-      p += " IMPORTANT: The user is ALLERGIC to: ${profile.allergies.join(', ')}. Do NOT include these ingredients.";
+      p += " CRITICAL WARNING: The user is ALLERGIC to: ${profile.allergies.join(', ')}. Do NOT include these ingredients under any circumstances.";
     }
     return p;
   }
@@ -71,7 +71,7 @@ class GeminiService {
   // --- Recipe Generation ---
 
   Future<Recipe> generateRecipeFromText(String prompt, {UserProfile? profile}) async {
-    String fullPrompt = 'Create a recipe for: "$prompt".';
+    String fullPrompt = 'Create a detailed cooking recipe for: "$prompt".';
     
     if (prompt.toLowerCase().contains('http')) {
       fullPrompt = 'Analyze this link/video: "$prompt". Extract the recipe from the title, captions, or context.';
@@ -97,7 +97,6 @@ class GeminiService {
 
   // --- SAFETY CHECK & VISION ---
 
-  /// STRICT validation to ensure image is food.
   Future<void> _validateImageIsFood(Uint8List imageBytes) async {
     final prompt = "Is this image a food item, a dish, or a cooking ingredient? Answer only YES or NO.";
     final content = [
@@ -116,10 +115,8 @@ class GeminiService {
   }
 
   Future<List<String>> generateOptionsFromImage(Uint8List imageBytes) async {
-    // 1. Validate Image First
     await _validateImageIsFood(imageBytes);
 
-    // 2. Generate Options
     final prompt = 'Look at this food image. Suggest exactly 6 specific, distinct recipe names that could represent this dish. Return ONLY a JSON array of strings.';
     
     final content = [
@@ -161,43 +158,55 @@ class GeminiService {
 
     final cleanText = _cleanJson(text);
     final data = jsonDecode(cleanText);
-    return _processRecipeResponse(data, imageUrlOverride: 'https://loremflickr.com/800/600/food,${selectedOption.replaceAll(' ', '')}');
+    
+    // For image-based generation, we still use a generated URL for consistency in lists
+    return _processRecipeResponse(data, imageUrlOverride: _generateAiImageUrl(selectedOption));
   }
 
   Recipe _processRecipeResponse(Map<String, dynamic> data, {String? imageUrlOverride}) {
       List<dynamic> ingredients = data['ingredients'] ?? [];
       for (var ing in ingredients) {
-        ing['imageUrl'] = _getIngredientImageUrl(ing['name']);
+        // Generate a specific AI image for the ingredient
+        ing['imageUrl'] = _generateAiImageUrl(ing['name'] + " ingredient white background");
       }
-      data['imageUrl'] = imageUrlOverride ?? 'https://loremflickr.com/800/600/food,dish';
+      
+      // If no override provided, generate one based on the title
+      String title = data['title'] ?? 'Food';
+      data['imageUrl'] = imageUrlOverride ?? _generateAiImageUrl(title + " food photography");
+      
       return Recipe.fromJson(data);
   }
 
-  String _getIngredientImageUrl(String ingredientName) {
-    final cleanName = ingredientName.split(' ').last; 
-    return 'https://loremflickr.com/100/100/$cleanName,food';
+  /// Generates a specific AI image URL. 
+  /// This solves the "Random Image" problem by creating a deterministic image 
+  /// based on the exact description using Pollinations AI (fast, free, accurate).
+  String _generateAiImageUrl(String prompt) {
+    final encoded = Uri.encodeComponent(prompt);
+    // Using 800x600 for high quality recipe images
+    return 'https://image.pollinations.ai/prompt/$encoded?width=800&height=600&model=flux&seed=${DateTime.now().millisecondsSinceEpoch}';
   }
 
   // --- Real Location Services ---
 
   Future<void> findGroceryStores(String ingredient) async {
-    // 1. Get Real Location
     try {
       Position position = await _determinePosition();
       
-      // 2. Open Real Google Maps Search
-      final query = Uri.encodeComponent("buy $ingredient");
-      final googleMapsUrl = Uri.parse("https://www.google.com/maps/search/$query/@${position.latitude},${position.longitude},14z");
+      // Opens the native Google Maps app specifically searching near the user's exact coordinates
+      final query = Uri.encodeComponent(ingredient);
+      final googleMapsUrl = Uri.parse("geo:${position.latitude},${position.longitude}?q=$query");
+      final webUrl = Uri.parse("https://www.google.com/maps/search/$query/@${position.latitude},${position.longitude},14z");
       
       if (await canLaunchUrl(googleMapsUrl)) {
-        await launchUrl(googleMapsUrl, mode: LaunchMode.externalApplication);
+        await launchUrl(googleMapsUrl);
+      } else if (await canLaunchUrl(webUrl)) {
+        await launchUrl(webUrl, mode: LaunchMode.externalApplication);
       } else {
         throw 'Could not open maps.';
       }
     } catch (e) {
       print("Location error: $e");
-      // Fallback search without location
-      final query = Uri.encodeComponent("buy $ingredient near me");
+      final query = Uri.encodeComponent(ingredient);
       final url = Uri.parse("https://www.google.com/maps/search/$query");
       await launchUrl(url, mode: LaunchMode.externalApplication);
     }

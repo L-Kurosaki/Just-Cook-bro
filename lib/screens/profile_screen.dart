@@ -106,6 +106,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Future<void> _editDiet() async {
+    if (_profile == null) return;
+    final diets = ["Vegan", "Vegetarian", "Keto", "Gluten-Free", "Paleo", "Dairy-Free"];
+    final selected = List<String>.from(_profile!.dietaryPreferences);
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: const Text("Dietary Preferences"),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: diets.map((d) => CheckboxListTile(
+                  title: Text(d),
+                  value: selected.contains(d),
+                  onChanged: (val) {
+                    setState(() {
+                      if (val == true) selected.add(d); else selected.remove(d);
+                    });
+                  },
+                )).toList(),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+              ElevatedButton(
+                onPressed: () async {
+                  _profile!.dietaryPreferences = selected;
+                  await _storage.saveProfile(_profile!);
+                  await _load();
+                  if(mounted) Navigator.pop(ctx);
+                }, 
+                child: const Text("Save")
+              )
+            ],
+          );
+        }
+      )
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_profile == null) return const Center(child: CircularProgressIndicator(color: Color(0xFFC9A24D)));
@@ -215,6 +258,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             
             const SizedBox(height: 24),
+
+            _buildSettingItem(
+              LucideIcons.utensils,
+              'Dietary Preferences',
+              _profile!.dietaryPreferences.isEmpty ? 'None set' : _profile!.dietaryPreferences.join(', '),
+              _editDiet
+            ),
             
             _buildSettingItem(
               LucideIcons.creditCard, 

@@ -27,6 +27,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
   final SupabaseService _supabase = SupabaseService();
   
   UserProfile? _userProfile;
+  bool _isPremium = false;
 
   @override
   void initState() {
@@ -38,11 +39,15 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
 
   Future<void> _loadProfile() async {
     final p = await _storage.getProfile();
-    setState(() => _userProfile = p);
+    final premium = await _rc.isPremium();
+    setState(() {
+      _userProfile = p;
+      _isPremium = premium;
+    });
   }
 
   Future<void> _findStores(String ingredient) async {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Opening Google Maps for real location data...")));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Finding store near you...")));
     await _gemini.findGroceryStores(ingredient);
   }
 
@@ -60,6 +65,11 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
   }
 
   Future<void> _shareToCommunity() async {
+    if (!_isPremium) {
+       // Allow basic users to share, or restrict? 
+       // Requirement says "Allow users to post their own recipes". Assuming all users.
+    }
+    
     final controller = TextEditingController();
     await showDialog(
       context: context,
@@ -224,33 +234,40 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
                   // Tab View Content (Inline for Sliver)
                   if (_tabController.index == 0) ...[
                     ..._recipe.ingredients.map((ing) => ListTile(
-                      contentPadding: EdgeInsets.zero,
+                      contentPadding: EdgeInsets.symmetric(vertical: 8),
                       leading: Container(
-                        width: 50, height: 50,
+                        width: 60, height: 60,
                         decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
                         child: ing.imageUrl != null 
-                            ? Image.network(ing.imageUrl!, fit: BoxFit.cover, errorBuilder: (_,__,___) => const Icon(LucideIcons.carrot))
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.network(ing.imageUrl!, fit: BoxFit.cover, errorBuilder: (_,__,___) => const Icon(LucideIcons.carrot))
+                              )
                             : const Icon(LucideIcons.carrot),
                       ),
-                      title: Text(ing.name),
+                      title: Text(ing.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Text(ing.amount),
                       trailing: IconButton(
-                        icon: const Icon(LucideIcons.mapPin, color: Colors.blue),
+                        icon: const Icon(LucideIcons.mapPin, color: Color(0xFFC9A24D)),
                         onPressed: () => _findStores(ing.name),
                       ),
                     )),
                   ] else ...[
                      ..._recipe.steps.asMap().entries.map((entry) => ListTile(
-                       leading: CircleAvatar(backgroundColor: const Color(0xFF2E2E2E), radius: 12, child: Text('${entry.key + 1}', style: const TextStyle(fontSize: 12, color: Color(0xFFC9A24D)))),
-                       title: Text(entry.value.instruction),
-                       subtitle: entry.value.tip != null ? Text('Tip: ${entry.value.tip}', style: const TextStyle(color: Colors.blue)) : null,
+                       contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                       leading: CircleAvatar(backgroundColor: const Color(0xFF2E2E2E), radius: 14, child: Text('${entry.key + 1}', style: const TextStyle(fontSize: 14, color: Color(0xFFC9A24D)))),
+                       title: Text(entry.value.instruction, style: const TextStyle(height: 1.4)),
+                       subtitle: entry.value.tip != null ? Text('Tip: ${entry.value.tip}', style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.w500)) : null,
                      ))
                   ],
 
                   const SizedBox(height: 40),
-                  const ReviewSection(
-                    reviews: [], 
-                    onAddReview: null, // Placeholder
+                  ReviewSection(
+                    reviews: const [], // In a real app, fetch from Supabase based on Recipe ID
+                    isPremium: _isPremium,
+                    onAddReview: (rating, comment) {
+                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Thanks for your review!")));
+                    }, 
                   ),
                   const SizedBox(height: 100),
                 ],
