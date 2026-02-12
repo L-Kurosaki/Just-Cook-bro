@@ -46,6 +46,3 @@ app/release
 
 # Windows
 Thumbs.db
-
-# Large Asset protection (optional, uncomment if you have large raw assets)
-# assets/raw/

@@ -51,9 +51,14 @@ class _PaywallState extends State<Paywall> {
     
     setState(() => _loading = true);
     try {
+      // 1. Attempt Purchase
       await Purchases.purchasePackage(package);
       
-      // Force sync logic immediately
+      // 2. CRITICAL: Force the app to check the new status immediately
+      // The listener in RevenueCatService might have a slight delay, so we force a check here.
+      await _rcService.syncPremiumStatus();
+      
+      // 3. Get the updated status
       bool isNowPro = await _rcService.isPremium();
 
       if (mounted && isNowPro) {
@@ -61,10 +66,23 @@ class _PaywallState extends State<Paywall> {
          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
            content: Text("Welcome to Premium! Your experience is now Gold."),
            backgroundColor: Color(0xFFDAA520),
+           duration: Duration(seconds: 4),
          ));
+      } else {
+        // If still false, it means Entitlement ID mismatch
+        if (mounted) {
+           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+             content: Text("Purchase successful, but Gold status not active. Please check Entitlement ID in dashboard."),
+             backgroundColor: Colors.red,
+           ));
+        }
       }
     } catch (e) {
       print("Purchase failed: $e");
+      // Check if user cancelled
+      if (!e.toString().contains("User cancelled")) {
+         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }

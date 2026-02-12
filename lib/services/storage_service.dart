@@ -81,11 +81,72 @@ class StorageService {
     return jsonList.map((e) => Folder.fromJson(e)).toList();
   }
 
-  Future<void> createFolder(String name) async {
+  Future<void> createFolder(String name, {String? parentId}) async {
     final prefs = await SharedPreferences.getInstance();
     final folders = await getFolders();
-    folders.add(Folder(name: name));
+    folders.add(Folder(name: name, parentId: parentId));
     await prefs.setString(_foldersKey, jsonEncode(folders.map((e) => e.toJson()).toList()));
+  }
+  
+  Future<void> updateFolder(Folder folder) async {
+    final prefs = await SharedPreferences.getInstance();
+    final folders = await getFolders();
+    final index = folders.indexWhere((f) => f.id == folder.id);
+    if (index != -1) {
+      folders[index] = folder;
+      await prefs.setString(_foldersKey, jsonEncode(folders.map((e) => e.toJson()).toList()));
+    }
+  }
+
+  Future<void> deleteFolder(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    List<Folder> folders = await getFolders();
+    
+    // Remove the folder
+    folders.removeWhere((f) => f.id == id);
+    
+    // Optional: Reset recipes in that folder to have no folder (or delete them? Usually reset)
+    List<Recipe> recipes = await getRecipes();
+    bool recipesChanged = false;
+    for (int i = 0; i < recipes.length; i++) {
+      if (recipes[i].folderId == id) {
+        recipes[i] = recipes[i].copyWith(folderId: null); // Reset using named argument logic manually if copyWith was strict, but here null is fine if logic supports it. 
+        // Note: Our copyWith uses `folderId ?? this.folderId`, so passing null usually keeps old value.
+        // We need a specific way to clear it.
+        // Let's reload recipe logic below to clear it.
+      }
+    }
+    
+    // Actually, simpler approach for the Recipe copyWith update:
+    // We will iterate and rebuild because standard copyWith null-coalescing prevents unsetting.
+    final updatedRecipes = recipes.map((r) {
+      if (r.folderId == id) {
+        return Recipe(
+          id: r.id,
+          title: r.title,
+          description: r.description,
+          prepTime: r.prepTime,
+          cookTime: r.cookTime,
+          servings: r.servings,
+          ingredients: r.ingredients,
+          steps: r.steps,
+          imageUrl: r.imageUrl,
+          isPremium: r.isPremium,
+          isOffline: r.isOffline,
+          isPublic: r.isPublic,
+          author: r.author,
+          sourceUrl: r.sourceUrl,
+          rating: r.rating,
+          folderId: null, // Clear folder
+          tags: r.tags,
+          allergens: r.allergens,
+        );
+      }
+      return r;
+    }).toList();
+
+    await prefs.setString(_foldersKey, jsonEncode(folders.map((e) => e.toJson()).toList()));
+    await prefs.setString(_recipesKey, jsonEncode(updatedRecipes.map((e) => e.toJson()).toList()));
   }
 
   // --- Profile ---

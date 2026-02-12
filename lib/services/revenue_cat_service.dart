@@ -21,7 +21,10 @@ String _getEnv(String key, String fallbackValue, {String? altKey}) {
 }
 
 final String _rawApiKey = _getEnv('RC_GOOGLE_KEY', 'test_BekbchnDGoHXuZwUveusGAGnaZc', altKey: 'ARC_google');
-const String _entitlementId = 'pro'; 
+
+// --- CRITICAL CONFIGURATION ---
+// UPDATED: Matches the Identifier in your screenshot that has "3 products".
+const String _entitlementId = 'Just Cook Bro Pro'; 
 
 class RevenueCatService {
   static final RevenueCatService _instance = RevenueCatService._internal();
@@ -62,6 +65,7 @@ class RevenueCatService {
 
       // 2. Listen for external updates (Renewals, Expirations, REFUNDS/REVOKES)
       Purchases.addCustomerInfoUpdateListener((customerInfo) {
+        print("🎧 Listener Triggered: Customer Info Updated");
         _handleCustomerInfoUpdate(customerInfo);
       });
 
@@ -73,8 +77,26 @@ class RevenueCatService {
 
   // Logic to handle state changes (Expiration, Refund, Purchase)
   Future<void> _handleCustomerInfoUpdate(CustomerInfo customerInfo) async {
-    final bool isPro = customerInfo.entitlements.all[_entitlementId]?.isActive ?? false;
+    // DEBUGGING: Print what we actually have vs what we expect
+    final activeEntitlements = customerInfo.entitlements.active.keys.toList();
+    print("🔍 CHECKING STATUS:");
+    print("   - Active Entitlements found: $activeEntitlements");
+    print("   - Looking for target ID: '$_entitlementId'");
+
+    // 1. Strict Check
+    bool isPro = customerInfo.entitlements.all[_entitlementId]?.isActive ?? false;
     
+    // 2. Fallback Check (In case user switches back to 'pro' later or Dashboard is messy)
+    if (!isPro) {
+       // Check if the lowercase 'pro' is active
+       if (customerInfo.entitlements.all['pro']?.isActive ?? false) {
+         isPro = true;
+         print("   - Found 'pro' entitlement active (Fallback).");
+       }
+    }
+
+    print("   - Result: isPro = $isPro");
+
     // Update local UI state
     premiumNotifier.value = isPro;
 
@@ -82,9 +104,9 @@ class RevenueCatService {
     // This handles revoking access if isPro becomes false (refund/expiry)
     try {
       await SupabaseService().updateProfile(isPremium: isPro);
-      print("Sync: Premium status updated to $isPro in Database.");
+      print("☁️ Database Sync: Premium status updated to $isPro");
     } catch (e) {
-      print("Sync Error: Could not update Supabase: $e");
+      print("❌ Sync Error: Could not update Supabase: $e");
     }
   }
 
@@ -92,6 +114,7 @@ class RevenueCatService {
   Future<void> syncPremiumStatus() async {
     if (!_isInitialized) return;
     try {
+      // Force a fetch from the network to ensure we have the latest (ignoring cache if needed)
       CustomerInfo customerInfo = await Purchases.getCustomerInfo();
       await _handleCustomerInfoUpdate(customerInfo);
     } catch (e) {
@@ -103,7 +126,15 @@ class RevenueCatService {
     if (!_isInitialized) return false;
     try {
       CustomerInfo customerInfo = await Purchases.getCustomerInfo();
+      
+      // Check primary ID
       bool status = customerInfo.entitlements.all[_entitlementId]?.isActive ?? false;
+      
+      // Check fallback ID
+      if (!status) {
+        status = customerInfo.entitlements.all['pro']?.isActive ?? false;
+      }
+
       premiumNotifier.value = status;
       return status;
     } catch (e) {
@@ -118,9 +149,10 @@ class RevenueCatService {
     }
 
     try {
+      // We try to show paywall for the ID that actually has products
       final paywallResult = await RevenueCatUI.presentPaywallIfNeeded(_entitlementId);
       
-      // Wait a moment for the listener to fire, or manually check
+      // Force a sync check after the modal closes
       await syncPremiumStatus();
 
       if (paywallResult == PaywallResult.purchased || paywallResult == PaywallResult.restored) {
@@ -145,6 +177,7 @@ class RevenueCatService {
   Future<void> restorePurchases() async {
     if (!_isInitialized) return;
     try {
+      print("🔄 Restoring purchases...");
       await Purchases.restorePurchases();
       await syncPremiumStatus();
     } catch (e) {

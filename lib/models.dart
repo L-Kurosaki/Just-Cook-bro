@@ -182,20 +182,31 @@ class Recipe {
 class Folder {
   final String id;
   final String name;
+  final String? parentId; // Added for nesting
 
-  Folder({String? id, required this.name}) : id = id ?? uuid.v4();
+  Folder({String? id, required this.name, this.parentId}) : id = id ?? uuid.v4();
 
   factory Folder.fromJson(Map<String, dynamic> json) {
     return Folder(
       id: json['id'],
       name: json['name'],
+      parentId: json['parentId'],
     );
   }
 
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,
+    'parentId': parentId,
   };
+  
+  Folder copyWith({String? name, String? parentId}) {
+    return Folder(
+      id: id,
+      name: name ?? this.name,
+      parentId: parentId ?? this.parentId,
+    );
+  }
 }
 
 class UserProfile {

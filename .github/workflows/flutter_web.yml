@@ -4,6 +4,10 @@ on:
   push:
     branches: [ main ]
 
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -19,9 +23,15 @@ jobs:
         run: flutter pub get
 
       - name: Build Web
-        # Replace placeholders with your actual keys in repository secrets if possible, 
-        # or hardcode them here for testing (Note: Keys will be visible in public repos).
-        run: flutter build web --release --base-href "/${{ github.event.repository.name }}/" --dart-define=API_KEY=${{ secrets.GEMINI_API_KEY }} --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
+        # All keys are passed here. Ensure these secrets are set in your Repo Settings.
+        run: |
+          flutter build web --release \
+            --base-href "/${{ github.event.repository.name }}/" \
+            --dart-define=API_KEY=${{ secrets.GEMINI_API_KEY }} \
+            --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
+            --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} \
+            --dart-define=RC_GOOGLE_KEY=${{ secrets.RC_GOOGLE_KEY }} \
+            --dart-define=RC_APPLE_KEY=${{ secrets.RC_APPLE_KEY }}
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3

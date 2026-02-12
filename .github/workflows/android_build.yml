@@ -1,0 +1,49 @@
+name: Build Android App (Free)
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      # FIX: Generate the missing 'android' folder structure
+      - name: Create Android Platform Files
+        run: flutter create . --platforms android
+
+      - name: Get Dependencies
+        run: flutter pub get
+
+      - name: Fix Gradle Permissions
+        run: chmod +x android/gradlew
+
+      - name: Build Android APK
+        run: |
+          flutter build apk --release \
+            --dart-define=GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}" \
+            --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
+            --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}" \
+            --dart-define=RC_GOOGLE_KEY="${{ secrets.RC_GOOGLE_KEY }}"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: JustCookBro-APK
+          path: build/app/outputs/flutter-apk/app-release.apk

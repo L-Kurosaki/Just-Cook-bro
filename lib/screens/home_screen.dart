@@ -6,6 +6,7 @@ import '../services/revenue_cat_service.dart';
 import '../services/supabase_service.dart';
 import 'recipe_detail_screen.dart';
 import 'add_recipe_screen.dart';
+import 'folder_manager_screen.dart';
 import '../widgets/logo.dart';
 import '../widgets/paywall.dart';
 
@@ -57,7 +58,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _filterRecipes() {
     List<Recipe> temp = _allRecipes;
     
-    // Filter by Folder
+    // Filter by Folder (Include checking subfolders if we implemented logic for it, but for now strict ID)
     if (_selectedFolderId != null) {
       temp = temp.where((r) => r.folderId == _selectedFolderId).toList();
     }
@@ -72,7 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  Future<void> _createFolder() async {
+  Future<void> _openFolderManager() async {
     final isPremium = await _rcService.isPremium();
     
     if (!isPremium) {
@@ -80,32 +81,9 @@ class _HomeScreenState extends State<HomeScreen> {
        return;
     }
 
-    final controller = TextEditingController();
-    await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("New Folder"),
-        content: TextField(
-          controller: controller, 
-          decoration: const InputDecoration(hintText: "Folder Name (e.g. Desserts)"),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-          ElevatedButton(
-            onPressed: () async {
-              if (controller.text.isNotEmpty) {
-                await _storage.createFolder(controller.text);
-                if (mounted) {
-                  Navigator.pop(context);
-                  _loadData();
-                }
-              }
-            }, 
-            child: const Text("Create")
-          )
-        ],
-      ),
-    );
+    // Open Premium Folder Manager
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => const FolderManagerScreen()));
+    _loadData(); // Reload when coming back
   }
 
   void _showFilterSheet() {
@@ -216,6 +194,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildFolderBar() {
+    // Logic: Show Root folders only (parentId == null).
+    // Limit to 2 folders max + "More" button to avoid long queue.
+    final rootFolders = _folders.where((f) => f.parentId == null).toList();
+    final displayFolders = rootFolders.take(2).toList();
+    final hasMore = rootFolders.length > 2;
+
     return Container(
       height: 50,
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -224,12 +208,15 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         children: [
           _buildFolderChip(null, "All Recipes"),
-          ..._folders.map((f) => _buildFolderChip(f.id, f.name)),
+          ...displayFolders.map((f) => _buildFolderChip(f.id, f.name)),
+          
+          // "More / Manage" Button
           Padding(
             padding: const EdgeInsets.only(left: 8),
             child: ActionChip(
-              label: const Icon(LucideIcons.plus, size: 16, color: Colors.grey),
-              onPressed: _createFolder,
+              label: Text(hasMore ? "+ ${rootFolders.length - 2} More" : "Folders"),
+              avatar: const Icon(LucideIcons.folderCog, size: 16, color: Colors.black),
+              onPressed: _openFolderManager,
               backgroundColor: Colors.white,
               side: const BorderSide(color: Colors.grey),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -279,23 +266,12 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              "Start by adding a recipe. We verify images to ensure only real food makes it in.",
+              "Start by adding a recipe via the button below.",
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey),
             ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () async {
-                 await Navigator.push(context, MaterialPageRoute(builder: (_) => const AddRecipeScreen()));
-                 _loadData();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFC9A24D),
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
-              ),
-              child: const Text('Add Recipe', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            ),
+            // REMOVED: Redundant 'Add Recipe' button here. 
+            // The FloatingActionButton is sufficient and consistent.
           ],
         ),
       ),
