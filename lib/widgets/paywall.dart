@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
-import '../services/supabase_service.dart';
+import '../services/revenue_cat_service.dart';
 
 class Paywall extends StatefulWidget {
   const Paywall({super.key});
@@ -13,6 +13,7 @@ class _PaywallState extends State<Paywall> {
   bool _loading = true;
   Offerings? _offerings;
   bool _alreadyPremium = false;
+  final RevenueCatService _rcService = RevenueCatService();
 
   @override
   void initState() {
@@ -22,14 +23,13 @@ class _PaywallState extends State<Paywall> {
 
   Future<void> _fetchOfferings() async {
     try {
-      CustomerInfo info = await Purchases.getCustomerInfo();
-      if (info.entitlements.all["pro"]?.isActive == true) {
+      // Check current status
+      bool isPro = await _rcService.isPremium();
+      if (isPro) {
         setState(() {
           _alreadyPremium = true;
           _loading = false;
         });
-        // Sync just in case
-        await SupabaseService().updateProfile(isPremium: true);
         return;
       }
 
@@ -51,15 +51,17 @@ class _PaywallState extends State<Paywall> {
     
     setState(() => _loading = true);
     try {
-      CustomerInfo info = await Purchases.purchasePackage(package);
-      if (mounted) {
-        if (info.entitlements.all["pro"]?.isActive == true) {
-           // Sync to Database
-           await SupabaseService().updateProfile(isPremium: true);
-           
-           Navigator.pop(context);
-           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Welcome to Pro!")));
-        }
+      await Purchases.purchasePackage(package);
+      
+      // Force sync logic immediately
+      bool isNowPro = await _rcService.isPremium();
+
+      if (mounted && isNowPro) {
+         Navigator.pop(context);
+         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+           content: Text("Welcome to Premium! Your experience is now Gold."),
+           backgroundColor: Color(0xFFDAA520),
+         ));
       }
     } catch (e) {
       print("Purchase failed: $e");
@@ -71,11 +73,14 @@ class _PaywallState extends State<Paywall> {
   Future<void> _restore() async {
     setState(() => _loading = true);
     try {
-      CustomerInfo info = await Purchases.restorePurchases();
-      if (info.entitlements.all["pro"]?.isActive == true) {
-        await SupabaseService().updateProfile(isPremium: true);
+      await _rcService.restorePurchases();
+      bool isNowPro = await _rcService.isPremium();
+      
+      if (isNowPro) {
         if (mounted) Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Restored successfully.")));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No active subscription found.")));
       }
     } catch (e) {
       print("Restore failed: $e");
@@ -92,11 +97,16 @@ class _PaywallState extends State<Paywall> {
            child: Column(
              mainAxisAlignment: MainAxisAlignment.center,
              children: [
-               const Icon(Icons.check_circle, color: Colors.green, size: 60),
+               const Icon(Icons.verified, color: Color(0xFFFFD700), size: 80),
                const SizedBox(height: 20),
-               const Text("You are already Premium!"),
+               const Text("You are already Premium!", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+               const Text("Enjoy your Gold status.", style: TextStyle(color: Colors.grey)),
                const SizedBox(height: 20),
-               ElevatedButton(onPressed: () => Navigator.pop(context), child: const Text("Go Back"))
+               ElevatedButton(
+                 onPressed: () => Navigator.pop(context), 
+                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFD700), foregroundColor: Colors.black),
+                 child: const Text("Back to Kitchen")
+               )
              ],
            ),
          ),
@@ -106,23 +116,44 @@ class _PaywallState extends State<Paywall> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text("Premium Access"),
+        title: const Text("Unlock Gold Tier"),
+        backgroundColor: Colors.white,
+        elevation: 0,
         actions: [
-          TextButton(onPressed: _restore, child: const Text("Restore"))
+          TextButton(onPressed: _restore, child: const Text("Restore", style: TextStyle(color: Color(0xFFC9A24D))))
         ],
       ),
       body: _loading 
-        ? const Center(child: CircularProgressIndicator())
+        ? const Center(child: CircularProgressIndicator(color: Color(0xFFFFD700)))
         : (_offerings?.current == null)
-            ? const Center(child: Text("No offerings available. Check Google Play Console configuration."))
+            ? const Center(child: Text("No offerings available. Check Google Play Console."))
             : Column(
                 children: [
-                   const Padding(
-                     padding: EdgeInsets.all(24.0),
-                     child: Text(
-                       "Unlock Unlimited Recipes, Folders, and Support Development!",
-                       textAlign: TextAlign.center,
-                       style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                   Container(
+                     padding: const EdgeInsets.all(24.0),
+                     decoration: BoxDecoration(
+                       gradient: LinearGradient(
+                         colors: [Colors.white, const Color(0xFFFFD700).withOpacity(0.1)],
+                         begin: Alignment.topCenter,
+                         end: Alignment.bottomCenter
+                       )
+                     ),
+                     child: const Column(
+                       children: [
+                         Icon(Icons.diamond, size: 50, color: Color(0xFFFFD700)),
+                         SizedBox(height: 16),
+                         Text(
+                           "Unlock Unlimited Cooking",
+                           textAlign: TextAlign.center,
+                           style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                         ),
+                         SizedBox(height: 8),
+                         Text(
+                           "Get Gold UI, Unlimited Recipes & Folders, and Support Development.",
+                           textAlign: TextAlign.center,
+                           style: TextStyle(color: Colors.grey),
+                         ),
+                       ],
                      ),
                    ),
                    Expanded(
@@ -131,12 +162,20 @@ class _PaywallState extends State<Paywall> {
                        padding: const EdgeInsets.all(16),
                        itemBuilder: (context, index) {
                          final package = _offerings!.current!.availablePackages[index];
-                         return Card(
+                         return Container(
                            margin: const EdgeInsets.only(bottom: 12),
+                           decoration: BoxDecoration(
+                             border: Border.all(color: const Color(0xFFFFD700)),
+                             borderRadius: BorderRadius.circular(12),
+                           ),
                            child: ListTile(
-                             title: Text(package.storeProduct.title),
+                             contentPadding: const EdgeInsets.all(16),
+                             title: Text(package.storeProduct.title, style: const TextStyle(fontWeight: FontWeight.bold)),
                              subtitle: Text(package.storeProduct.description),
-                             trailing: Text(package.storeProduct.priceString, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                             trailing: Text(
+                               package.storeProduct.priceString, 
+                               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFFDAA520))
+                             ),
                              onTap: () => _purchase(package),
                            ),
                          );
@@ -145,7 +184,7 @@ class _PaywallState extends State<Paywall> {
                    ),
                    const Padding(
                      padding: EdgeInsets.all(16),
-                     child: Text("100% Secure Payment via Google Play", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                     child: Text("Secure Payment via Google Play / App Store", style: TextStyle(color: Colors.grey, fontSize: 12)),
                    )
                 ],
               ),

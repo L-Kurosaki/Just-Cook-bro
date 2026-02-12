@@ -9,21 +9,13 @@ import 'services/revenue_cat_service.dart';
 // CONFIGURATION HELPER
 // ==========================================
 String _getEnv(String key, String fallbackValue, {String? altKey}) {
-  // 1. Try primary key (Standard naming)
   String value = String.fromEnvironment(key);
-  
-  // 2. Try alternate key (User's custom naming in Codemagic)
   if ((value.isEmpty || value.startsWith('\$')) && altKey != null) {
     value = String.fromEnvironment(altKey);
   }
-
-  // 3. If still missing, use hardcoded fallback
   if (value.isEmpty || value.startsWith('\$')) {
-    print("⚠️ Key '$key'/'$altKey' missing. Using Backup.");
     return fallbackValue;
   }
-
-  // 4. Cleanup quotes if present
   if (value.startsWith('"') && value.endsWith('"')) {
     value = value.substring(1, value.length - 1);
   } else if (value.startsWith("'") && value.endsWith("'")) {
@@ -35,7 +27,6 @@ String _getEnv(String key, String fallbackValue, {String? altKey}) {
 // ==========================================
 // API KEYS
 // ==========================================
-// We now check for YOUR specific variable names (key, super_base_url, etc)
 final String _geminiKey = _getEnv('GEMINI_API_KEY', 'AIzaSyA4wudATZ2vLf3s-OaZKEEBBv37z7jjnaA', altKey: 'key');
 final String _supabaseUrl = _getEnv('SUPABASE_URL', 'https://ltkfrfsowjgrdnqzewah.supabase.co', altKey: 'super_base_url');
 final String _supabaseKey = _getEnv('SUPABASE_ANON_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx0a2ZyZnNvd2pncmRucXpld2FoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyNDg1NzEsImV4cCI6MjA4NTgyNDU3MX0.nki1OGBMkgoXlj-5FO3mD6_TtNgzcnyRNsUZk749KtM', altKey: 'super_base_key');
@@ -44,10 +35,6 @@ final String _rcGoogleKey = _getEnv('RC_GOOGLE_KEY', 'test_BekbchnDGoHXuZwUveusG
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  print("🚀 Starting App with Config:");
-  print("Supabase URL: ${_supabaseUrl.isNotEmpty ? 'OK' : 'MISSING'}");
-  print("Gemini Key: ${_geminiKey.isNotEmpty ? 'OK' : 'MISSING'}");
-
   // 1. Initialize Supabase
   try {
     await Supabase.initialize(url: _supabaseUrl, anonKey: _supabaseKey);
@@ -81,24 +68,45 @@ class _JustCookBroAppState extends State<JustCookBroApp> {
     }
 
     final client = Supabase.instance.client;
-    // Check session safely
     final session = client.auth.currentSession;
     
-    return MaterialApp(
-      title: 'Just Cook Bro',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFC9A24D),
-          primary: const Color(0xFFC9A24D),
-          background: Colors.white,
-          surface: Colors.white,
-        ),
-        useMaterial3: true,
-        scaffoldBackgroundColor: Colors.white,
-        fontFamily: 'Inter',
-      ),
-      home: session != null ? const MainScreen() : const AuthScreen(),
+    // Listen to Premium Status to change the whole app Theme
+    return ValueListenableBuilder<bool>(
+      valueListenable: RevenueCatService().premiumNotifier,
+      builder: (context, isPremium, child) {
+        
+        // Define Colors based on status
+        final primaryColor = isPremium ? const Color(0xFFFFD700) : const Color(0xFFC9A24D); // Gold vs Bronze
+        final surfaceTint = isPremium ? const Color(0xFFFFF8E1) : Colors.white;
+
+        return MaterialApp(
+          title: 'Just Cook Bro',
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: primaryColor,
+              primary: primaryColor,
+              background: surfaceTint,
+              surface: Colors.white,
+            ),
+            useMaterial3: true,
+            scaffoldBackgroundColor: Colors.white,
+            fontFamily: 'Inter',
+            // Customizing icons globally for premium feel
+            iconTheme: IconThemeData(
+              color: isPremium ? const Color(0xFFDAA520) : const Color(0xFF2E2E2E),
+            ),
+            appBarTheme: AppBarTheme(
+              iconTheme: IconThemeData(color: isPremium ? const Color(0xFFDAA520) : Colors.black),
+            ),
+            bottomNavigationBarTheme: BottomNavigationBarThemeData(
+              selectedItemColor: isPremium ? const Color(0xFFDAA520) : const Color(0xFFC9A24D),
+              unselectedItemColor: Colors.grey,
+            )
+          ),
+          home: session != null ? const MainScreen() : const AuthScreen(),
+        );
+      }
     );
   }
 }

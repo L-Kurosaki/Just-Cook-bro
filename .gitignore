@@ -9,6 +9,10 @@
 .buildlog/
 .history
 .svn/
+.idea/
+*.iml
+*.ipr
+*.iws
 
 # Flutter/Dart/Pub
 .dart_tool/
@@ -26,3 +30,22 @@ ios/Runner/GeneratedPluginRegistrant.*
 android/local.properties
 .flutter-plugins
 .flutter-plugins-dependencies
+
+# Android Studio
+.gradle
+local.properties
+.idea
+.settings
+app/release
+
+# Visual Studio Code
+.vscode/
+
+# Mac
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Large Asset protection (optional, uncomment if you have large raw assets)
+# assets/raw/

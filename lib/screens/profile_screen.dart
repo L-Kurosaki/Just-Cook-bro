@@ -280,6 +280,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 }
               },
             ),
+
+            _buildSettingItem(
+              LucideIcons.refreshCw,
+              'Sync Subscription', 
+              'Force update cloud status',
+              () async {
+                await _rcService.syncPremiumStatus();
+                await _load();
+                if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Synced with RevenueCat & Supabase.")));
+              },
+            ),
           ],
         ),
       ),

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'package:purchases_ui_flutter/purchases_ui_flutter.dart';
+import 'supabase_service.dart';
 
 // Helper for Env with fallback
 String _getEnv(String key, String fallbackValue, {String? altKey}) {
@@ -28,14 +29,15 @@ class RevenueCatService {
   RevenueCatService._internal();
 
   bool _isInitialized = false;
+  
+  // GLOBAL STATE: Listen to this to change UI to GOLD
+  final ValueNotifier<bool> premiumNotifier = ValueNotifier(false);
 
   Future<void> init() async {
     if (_isInitialized) return;
 
-    // Use the processed key
     String apiKey = _rawApiKey;
 
-    // Check if key is missing
     if (apiKey.isEmpty) {
       print("⚠️ RevenueCat Error: RC_GOOGLE_KEY is missing.");
       return;
@@ -54,9 +56,46 @@ class RevenueCatService {
       PurchasesConfiguration configuration = PurchasesConfiguration(apiKey);
       await Purchases.configure(configuration);
       _isInitialized = true;
+      
+      // 1. Check initial state
+      await syncPremiumStatus();
+
+      // 2. Listen for external updates (Renewals, Expirations, REFUNDS/REVOKES)
+      Purchases.addCustomerInfoUpdateListener((customerInfo) {
+        _handleCustomerInfoUpdate(customerInfo);
+      });
+
       print("RevenueCat initialized successfully");
     } catch (e) {
       print("Failed to init RevenueCat: $e");
+    }
+  }
+
+  // Logic to handle state changes (Expiration, Refund, Purchase)
+  Future<void> _handleCustomerInfoUpdate(CustomerInfo customerInfo) async {
+    final bool isPro = customerInfo.entitlements.all[_entitlementId]?.isActive ?? false;
+    
+    // Update local UI state
+    premiumNotifier.value = isPro;
+
+    // SYNC WITH DATABASE
+    // This handles revoking access if isPro becomes false (refund/expiry)
+    try {
+      await SupabaseService().updateProfile(isPremium: isPro);
+      print("Sync: Premium status updated to $isPro in Database.");
+    } catch (e) {
+      print("Sync Error: Could not update Supabase: $e");
+    }
+  }
+
+  // Exposed for Manual Sync
+  Future<void> syncPremiumStatus() async {
+    if (!_isInitialized) return;
+    try {
+      CustomerInfo customerInfo = await Purchases.getCustomerInfo();
+      await _handleCustomerInfoUpdate(customerInfo);
+    } catch (e) {
+      print("Error checking premium status: $e");
     }
   }
 
@@ -64,9 +103,10 @@ class RevenueCatService {
     if (!_isInitialized) return false;
     try {
       CustomerInfo customerInfo = await Purchases.getCustomerInfo();
-      return customerInfo.entitlements.all[_entitlementId]?.isActive ?? false;
+      bool status = customerInfo.entitlements.all[_entitlementId]?.isActive ?? false;
+      premiumNotifier.value = status;
+      return status;
     } catch (e) {
-      print("Error checking premium status: $e");
       return false;
     }
   }
@@ -79,10 +119,14 @@ class RevenueCatService {
 
     try {
       final paywallResult = await RevenueCatUI.presentPaywallIfNeeded(_entitlementId);
+      
+      // Wait a moment for the listener to fire, or manually check
+      await syncPremiumStatus();
+
       if (paywallResult == PaywallResult.purchased || paywallResult == PaywallResult.restored) {
         return true;
       }
-      return await isPremium();
+      return premiumNotifier.value;
     } catch (e) {
       print("Error showing paywall: $e");
       return false;
@@ -102,6 +146,7 @@ class RevenueCatService {
     if (!_isInitialized) return;
     try {
       await Purchases.restorePurchases();
+      await syncPremiumStatus();
     } catch (e) {
       print("Restore failed: $e");
     }
