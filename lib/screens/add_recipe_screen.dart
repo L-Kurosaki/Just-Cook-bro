@@ -131,7 +131,8 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> with SingleTickerProv
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(LucideIcons.cloudCheck, size: 48, color: Colors.green),
+              // FIXED: Replaced invalid cloudCheck with Icons.cloud_done
+              const Icon(Icons.cloud_done, size: 48, color: Colors.green),
               const SizedBox(height: 16),
               const Text("Saved to Cloud!", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
               const Text("This recipe is now on your account.", style: TextStyle(color: Colors.grey)),
