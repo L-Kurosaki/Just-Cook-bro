@@ -80,10 +80,11 @@ class Recipe {
   final bool isOffline;
   final bool isPublic;
   final String? author;
+  final String? sourceUrl; // New: For attribution
   final int? rating;
   final String? folderId; 
-  final List<String> tags; // New: For filtering (e.g. Vegan, Keto)
-  final List<String> allergens; // New: For safety warnings
+  final List<String> tags;
+  final List<String> allergens;
 
   Recipe({
     String? id,
@@ -99,6 +100,7 @@ class Recipe {
     this.isOffline = false,
     this.isPublic = false,
     this.author,
+    this.sourceUrl,
     this.rating,
     this.folderId,
     this.tags = const [],
@@ -124,6 +126,7 @@ class Recipe {
       isOffline: json['isOffline'] ?? false,
       isPublic: json['isPublic'] ?? false,
       author: json['author'],
+      sourceUrl: json['sourceUrl'],
       rating: json['rating'],
       folderId: json['folderId'],
       tags: List<String>.from(json['tags'] ?? []),
@@ -145,6 +148,7 @@ class Recipe {
     'isOffline': isOffline,
     'isPublic': isPublic,
     'author': author,
+    'sourceUrl': sourceUrl,
     'rating': rating,
     'folderId': folderId,
     'tags': tags,
@@ -166,6 +170,7 @@ class Recipe {
       isOffline: isOffline,
       isPublic: isPublic,
       author: author,
+      sourceUrl: sourceUrl,
       rating: rating,
       folderId: folderId ?? this.folderId,
       tags: tags,

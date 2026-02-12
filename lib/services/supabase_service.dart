@@ -29,6 +29,10 @@ class SupabaseService {
   Future<void> signOut() async {
     await _supabase.auth.signOut();
   }
+  
+  Future<void> resetPassword(String email) async {
+    await _supabase.auth.resetPasswordForEmail(email);
+  }
 
   // --- PROFILE MANAGEMENT ---
 
@@ -44,10 +48,11 @@ class SupabaseService {
     return user.userMetadata?['avatar_url'];
   }
 
-  Future<void> updateProfile({String? name, String? phone}) async {
+  Future<void> updateProfile({String? name, String? phone, bool? isPremium}) async {
     final updates = <String, dynamic>{};
     if (name != null) updates['full_name'] = name;
     if (phone != null) updates['phone'] = phone;
+    if (isPremium != null) updates['is_premium'] = isPremium;
     
     await _supabase.auth.updateUser(UserAttributes(data: updates));
   }

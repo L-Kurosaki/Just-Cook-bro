@@ -51,6 +51,22 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
+  Future<void> _forgotPassword() async {
+    if (_emailController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter your email first.")));
+      return;
+    }
+    try {
+      await SupabaseService().resetPassword(_emailController.text);
+      if(mounted) showDialog(
+        context: context, 
+        builder: (_) => const AlertDialog(content: Text("Password reset link sent to your email."))
+      );
+    } catch(e) {
+      if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -86,7 +102,17 @@ class _AuthScreenState extends State<AuthScreen> {
               _buildInput(_emailController, 'Email', LucideIcons.mail),
               const SizedBox(height: 16),
               _buildInput(_passwordController, 'Password', LucideIcons.lock, isObscure: true),
-              const SizedBox(height: 32),
+              
+              if (_isLogin)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: _forgotPassword,
+                    child: const Text("Forgot Password?", style: TextStyle(color: Color(0xFFC9A24D))),
+                  ),
+                ),
+
+              const SizedBox(height: 24),
               
               SizedBox(
                 width: double.infinity,

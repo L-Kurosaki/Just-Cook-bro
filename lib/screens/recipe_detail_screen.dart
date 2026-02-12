@@ -46,9 +46,55 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
     });
   }
 
+  // UPDATED: In-App Store Finder
   Future<void> _findStores(String ingredient) async {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Finding store near you...")));
-    await _gemini.findGroceryStores(ingredient);
+    showModalBottomSheet(
+      context: context, 
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(20),
+        height: 400,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Find '$ingredient' Nearby", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            const Text("Locating best shops...", style: TextStyle(color: Colors.grey)),
+            const SizedBox(height: 20),
+            Expanded(
+              child: FutureBuilder<List<Map<String, String>>>(
+                future: _gemini.findShopsNearby(ingredient),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator(color: Color(0xFFC9A24D)));
+                  }
+                  if (snapshot.hasError) return const Text("Could not find location data.");
+                  
+                  final shops = snapshot.data ?? [];
+                  return ListView.separated(
+                    itemCount: shops.length,
+                    separatorBuilder: (_,__) => const Divider(),
+                    itemBuilder: (ctx, i) {
+                       return ListTile(
+                         leading: Container(
+                           padding: const EdgeInsets.all(8),
+                           decoration: BoxDecoration(color: const Color(0xFFF3F4F6), borderRadius: BorderRadius.circular(8)),
+                           child: const Icon(LucideIcons.store, color: Color(0xFFC9A24D)),
+                         ),
+                         title: Text(shops[i]['name']!),
+                         subtitle: Text(shops[i]['vicinity']!),
+                         trailing: const Icon(LucideIcons.mapPin),
+                       );
+                    },
+                  );
+                },
+              ),
+            )
+          ],
+        ),
+      )
+    );
   }
 
   Future<void> _deleteRecipe() async {
@@ -65,11 +111,6 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
   }
 
   Future<void> _shareToCommunity() async {
-    if (!_isPremium) {
-       // Allow basic users to share, or restrict? 
-       // Requirement says "Allow users to post their own recipes". Assuming all users.
-    }
-    
     final controller = TextEditingController();
     await showDialog(
       context: context,
@@ -144,15 +185,11 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
   }
 
   bool _hasSafetyWarning() {
+    if (_recipe.allergens.isNotEmpty) return true; // Always warn if allergens exist
     if (_userProfile == null) return false;
     for (var allergy in _userProfile!.allergies) {
       if (_recipe.allergens.map((a) => a.toLowerCase()).contains(allergy.toLowerCase())) {
         return true;
-      }
-      for (var ing in _recipe.ingredients) {
-        if (ing.name.toLowerCase().contains(allergy.toLowerCase())) {
-          return true;
-        }
       }
     }
     return false;
@@ -192,21 +229,49 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // UPDATED: Prominent Allergy Warning
                   if (unsafe)
                     Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.red)),
-                      child: Row(children: [
-                        const Icon(LucideIcons.alertTriangle, color: Colors.red),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text("Warning: This recipe may contain ingredients you are allergic to (${_userProfile?.allergies.join(', ')}).", style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)))
-                      ]),
+                      margin: const EdgeInsets.only(bottom: 20),
+                      padding: const EdgeInsets.all(16),
+                      width: double.infinity,
+                      decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.red, width: 2)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(children: [
+                            Icon(LucideIcons.alertTriangle, color: Colors.red, size: 24),
+                            SizedBox(width: 8),
+                            Text("ALLERGY ALERT", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 18))
+                          ]),
+                          const SizedBox(height: 8),
+                          Text(
+                            "This recipe contains: ${_recipe.allergens.join(', ')}",
+                            style: const TextStyle(color: Colors.red, fontSize: 16, fontWeight: FontWeight.w600)
+                          ),
+                        ],
+                      ),
                     ),
                   
                   Text(_recipe.title, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   
+                  // UPDATED: Attribution
+                  if (_recipe.sourceUrl != null && _recipe.sourceUrl!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: Row(
+                        children: [
+                           const Icon(LucideIcons.link, size: 14, color: Colors.blue),
+                           const SizedBox(width: 4),
+                           Expanded(child: Text("Source: ${_recipe.sourceUrl}", style: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline), maxLines: 1, overflow: TextOverflow.ellipsis))
+                        ],
+                      ),
+                    )
+                  else if (_recipe.author != null)
+                     Text("by ${_recipe.author}", style: const TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
+
+                  const SizedBox(height: 8),
                   Text(_recipe.description, style: const TextStyle(color: Colors.grey, fontSize: 16)),
                   const SizedBox(height: 20),
                   
@@ -234,7 +299,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
                   // Tab View Content (Inline for Sliver)
                   if (_tabController.index == 0) ...[
                     ..._recipe.ingredients.map((ing) => ListTile(
-                      contentPadding: EdgeInsets.symmetric(vertical: 8),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
                       leading: Container(
                         width: 60, height: 60,
                         decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
@@ -262,6 +327,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
                   ],
 
                   const SizedBox(height: 40),
+                  // FIXED: Build Error (onAddReview is no longer null)
                   ReviewSection(
                     reviews: const [], // In a real app, fetch from Supabase based on Recipe ID
                     isPremium: _isPremium,
@@ -283,7 +349,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
               context: context, 
               builder: (ctx) => AlertDialog(
                 title: const Text("Safety Warning"),
-                content: const Text("This recipe conflicts with your allergies. Are you sure you want to proceed?"),
+                content: Text("This recipe contains allergens: ${_recipe.allergens.join(', ')}. Please confirm you want to cook this."),
                 actions: [
                   TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
                   ElevatedButton(
@@ -292,7 +358,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTick
                       Navigator.pop(ctx);
                       Navigator.push(context, MaterialPageRoute(builder: (_) => CookingModeScreen(recipe: _recipe)));
                     },
-                    child: const Text("Proceed Anyway", style: TextStyle(color: Colors.white))
+                    child: const Text("I Understand", style: TextStyle(color: Colors.white))
                   )
                 ],
               )

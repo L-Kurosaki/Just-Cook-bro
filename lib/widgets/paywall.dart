@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
+import '../services/supabase_service.dart';
 
 class Paywall extends StatefulWidget {
   const Paywall({super.key});
@@ -11,6 +12,7 @@ class Paywall extends StatefulWidget {
 class _PaywallState extends State<Paywall> {
   bool _loading = true;
   Offerings? _offerings;
+  bool _alreadyPremium = false;
 
   @override
   void initState() {
@@ -20,6 +22,17 @@ class _PaywallState extends State<Paywall> {
 
   Future<void> _fetchOfferings() async {
     try {
+      CustomerInfo info = await Purchases.getCustomerInfo();
+      if (info.entitlements.all["pro"]?.isActive == true) {
+        setState(() {
+          _alreadyPremium = true;
+          _loading = false;
+        });
+        // Sync just in case
+        await SupabaseService().updateProfile(isPremium: true);
+        return;
+      }
+
       Offerings offerings = await Purchases.getOfferings();
       if (mounted) {
         setState(() {
@@ -34,11 +47,16 @@ class _PaywallState extends State<Paywall> {
   }
 
   Future<void> _purchase(Package package) async {
+    if (_alreadyPremium) return;
+    
     setState(() => _loading = true);
     try {
       CustomerInfo info = await Purchases.purchasePackage(package);
       if (mounted) {
         if (info.entitlements.all["pro"]?.isActive == true) {
+           // Sync to Database
+           await SupabaseService().updateProfile(isPremium: true);
+           
            Navigator.pop(context);
            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Welcome to Pro!")));
         }
@@ -53,8 +71,12 @@ class _PaywallState extends State<Paywall> {
   Future<void> _restore() async {
     setState(() => _loading = true);
     try {
-      await Purchases.restorePurchases();
-      if (mounted) Navigator.pop(context);
+      CustomerInfo info = await Purchases.restorePurchases();
+      if (info.entitlements.all["pro"]?.isActive == true) {
+        await SupabaseService().updateProfile(isPremium: true);
+        if (mounted) Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Restored successfully.")));
+      }
     } catch (e) {
       print("Restore failed: $e");
     } finally {
@@ -64,6 +86,23 @@ class _PaywallState extends State<Paywall> {
 
   @override
   Widget build(BuildContext context) {
+    if (_alreadyPremium) {
+       return Scaffold(
+         body: Center(
+           child: Column(
+             mainAxisAlignment: MainAxisAlignment.center,
+             children: [
+               const Icon(Icons.check_circle, color: Colors.green, size: 60),
+               const SizedBox(height: 20),
+               const Text("You are already Premium!"),
+               const SizedBox(height: 20),
+               ElevatedButton(onPressed: () => Navigator.pop(context), child: const Text("Go Back"))
+             ],
+           ),
+         ),
+       );
+    }
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
