@@ -79,32 +79,100 @@ class SupabaseService {
     }
   }
 
-  // --- COMMUNITY FEED (REAL TIME) ---
+  // --- RECIPE MANAGEMENT (CLOUD SYNC) ---
 
-  Future<void> shareRecipeToCommunity(Recipe recipe, String caption, {List<SpotifyTrack>? musicSession}) async {
+  // Get My Recipes (Private + Public that I created)
+  Stream<List<Recipe>> getMyRecipesStream() {
+    final uid = _supabase.auth.currentUser?.id;
+    if (uid == null) return Stream.value([]);
+
+    return _supabase
+        .from('recipes')
+        .stream(primaryKey: ['id'])
+        .eq('author_id', uid)
+        .order('created_at', ascending: false)
+        .map((data) => data.map((json) {
+           // Ensure ID is string
+           return Recipe.fromJson(json);
+        }).toList())
+        .handleError((e) {
+           print("Error fetching my recipes: $e");
+           return <Recipe>[];
+        });
+  }
+
+  // Create or Update a Recipe in Cloud
+  Future<void> saveRecipe(Recipe recipe) async {
     final user = _supabase.auth.currentUser;
     if (user == null) throw Exception("Must be logged in");
-
+    
     final isPremium = await RevenueCatService().isPremium();
 
     final recipeJson = recipe.toJson();
-    if (musicSession != null && musicSession.isNotEmpty) {
-      recipeJson['musicSession'] = musicSession.map((e) => e.toJson()).toList();
-    }
-
-    // Insert with premium status so we can highlight them in the feed
-    await _supabase.from('recipes').insert({
+    
+    // Ensure critical fields for cloud
+    final data = {
+      'id': recipe.id,
       'title': recipe.title,
       'content': recipeJson,
       'author_id': user.id,
       'author_name': user.userMetadata?['full_name'] ?? 'Chef',
-      'author_is_premium': isPremium, // NEW: Track if author is gold
+      'author_is_premium': isPremium,
+      'is_public': recipe.isPublic, // Respect the recipe's visibility
+      'caption': recipe.description,
+      // 'comments': [], // Don't overwrite comments if updating
+      'created_at': DateTime.now().toIso8601String(),
+    };
+
+    try {
+      // Upsert: Insert if new, Update if exists
+      await _supabase.from('recipes').upsert(data);
+    } on PostgrestException catch (e) {
+      // Self-healing: if columns missing
+      if (e.code == 'PGRST204') {
+         if (e.message.contains('author_is_premium')) {
+            data.remove('author_is_premium');
+            await _supabase.from('recipes').upsert(data);
+         }
+      } else {
+        rethrow;
+      }
+    }
+  }
+
+  Future<void> deleteRecipe(String recipeId) async {
+    await _supabase.from('recipes').delete().eq('id', recipeId);
+  }
+
+  // --- COMMUNITY FEED (REAL TIME) ---
+
+  Future<void> shareRecipeToCommunity(Recipe recipe, String caption, {List<SpotifyTrack>? musicSession}) async {
+    // Just update the existing recipe to be public and have a caption
+    final user = _supabase.auth.currentUser;
+    if (user == null) throw Exception("Must be logged in");
+
+    // We can just reuse saveRecipe but force is_public = true
+    final publicVersion = recipe.copyWith(isPublic: true);
+    
+    // We update the table specifically to set caption and public
+    final isPremium = await RevenueCatService().isPremium();
+    final recipeJson = publicVersion.toJson();
+    if (musicSession != null) {
+      recipeJson['musicSession'] = musicSession.map((e) => e.toJson()).toList();
+    }
+
+    final data = {
+      'id': recipe.id,
+      'content': recipeJson,
+      'author_id': user.id,
+      'author_name': user.userMetadata?['full_name'] ?? 'Chef',
+      'author_is_premium': isPremium, 
       'is_public': true,
       'caption': caption,
-      'comments': [], 
-      'likes': 0,
       'created_at': DateTime.now().toIso8601String(),
-    });
+    };
+
+    await _supabase.from('recipes').upsert(data);
   }
 
   Stream<List<Map<String, dynamic>>> getCommunityFeedStream() {
@@ -113,7 +181,11 @@ class SupabaseService {
         .stream(primaryKey: ['id'])
         .eq('is_public', true)
         .order('created_at', ascending: false)
-        .map((data) => List<Map<String, dynamic>>.from(data));
+        .map((data) => List<Map<String, dynamic>>.from(data))
+        .handleError((error) {
+           print("Stream Error (likely missing table): $error");
+           return <Map<String, dynamic>>[]; 
+        });
   }
 
   // --- INTERACTIONS & NOTIFICATIONS ---
@@ -123,22 +195,23 @@ class SupabaseService {
     if (user == null || user.id == targetUserId) return; // Don't notify self
 
     final triggerName = user.userMetadata?['full_name'] ?? 'Someone';
-
-    try {
-      await _supabase.from('notifications').insert({
-        'user_id': targetUserId, // Who gets the alert
-        'type': type, // 'save', 'cook', 'review'
-        'message': message, // Full message (Frontend decides whether to censor based on Premium)
-        'trigger_user': triggerName, // Store who caused it
+    
+    final data = {
+        'user_id': targetUserId, 
+        'type': type, 
+        'message': message, 
+        'trigger_user': triggerName, 
         'created_at': DateTime.now().toIso8601String(),
         'is_read': false,
-      });
+    };
+
+    try {
+      await _supabase.from('notifications').insert(data);
     } catch (e) {
-      print("Notification error: $e");
+      // Ignore if table missing
     }
   }
   
-  // New: Get Notifications for the logged-in user
   Stream<List<AppNotification>> getNotificationsStream() {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) return Stream.value([]);
@@ -148,7 +221,8 @@ class SupabaseService {
         .stream(primaryKey: ['id'])
         .eq('user_id', userId)
         .order('created_at', ascending: false)
-        .map((data) => data.map((e) => AppNotification.fromJson(e)).toList());
+        .map((data) => data.map((e) => AppNotification.fromJson(e)).toList())
+        .handleError((e) => <AppNotification>[]);
   }
 
   Future<void> addCommentOrRating(String recipeId, String recipeAuthorId, int rating, String? comment) async {
@@ -157,32 +231,29 @@ class SupabaseService {
 
     final userName = user.userMetadata?['full_name'] ?? 'Chef';
 
-    // 1. Fetch current comments
-    final data = await _supabase.from('recipes').select('comments').eq('id', recipeId).single();
-    List current = data['comments'] ?? [];
+    try {
+      final data = await _supabase.from('recipes').select('comments').eq('id', recipeId).single();
+      List current = data['comments'] ?? [];
 
-    // 2. Add new interaction
-    final newInteraction = {
-      'user_id': user.id,
-      'user_name': userName,
-      'rating': rating,
-      'comment': comment ?? "",
-      'date': DateTime.now().toIso8601String(),
-    };
-    
-    current.add(newInteraction);
+      final newInteraction = {
+        'user_id': user.id,
+        'user_name': userName,
+        'rating': rating,
+        'comment': comment ?? "",
+        'date': DateTime.now().toIso8601String(),
+      };
+      
+      current.add(newInteraction);
+      await _supabase.from('recipes').update({'comments': current}).eq('id', recipeId);
 
-    // 3. Update DB
-    await _supabase.from('recipes').update({'comments': current}).eq('id', recipeId);
-
-    // 4. Notify Author
-    // We send the generic message type. The details (like "User X") are handled by notifyAuthor logic
-    String notifMsg = "rated your recipe $rating stars";
-    if (comment != null && comment.isNotEmpty) {
-      notifMsg += " and commented: \"$comment\"";
+      String notifMsg = "rated your recipe $rating stars";
+      if (comment != null && comment.isNotEmpty) {
+        notifMsg += " and commented: \"$comment\"";
+      }
+      
+      await notifyAuthor(recipeAuthorId, 'review', notifMsg);
+    } catch (e) {
+      print("Error adding comment: $e");
     }
-    
-    // Pass the action suffix. The notification screen will reconstruct "TriggerUser + suffix" or "Someone + suffix"
-    await notifyAuthor(recipeAuthorId, 'review', notifMsg);
   }
 }

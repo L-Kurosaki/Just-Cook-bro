@@ -18,14 +18,12 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  List<Recipe> _allRecipes = [];
-  List<Recipe> _filteredRecipes = [];
+  // We now use Stream for real-time updates from Cloud
   List<Folder> _folders = [];
   String? _selectedFolderId;
   String? _activeFilterTag;
   String _userName = "Chef";
   
-  bool _isLoading = true;
   final StorageService _storage = StorageService();
   final RevenueCatService _rcService = RevenueCatService();
   final SupabaseService _supabase = SupabaseService();
@@ -33,57 +31,30 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _loadAuxData();
   }
 
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
-    
-    // Load local recipes
-    final recipes = await _storage.getRecipes();
+  Future<void> _loadAuxData() async {
+    // Folders are still local for now, can be migrated later if needed
     final folders = await _storage.getFolders();
-    
-    // Load Real User Name
     final name = await _supabase.getUserName();
 
-    setState(() {
-      _allRecipes = recipes;
-      _folders = folders;
-      _userName = name;
-      _filterRecipes();
-      _isLoading = false;
-    });
-  }
-
-  void _filterRecipes() {
-    List<Recipe> temp = _allRecipes;
-    
-    // Filter by Folder (Include checking subfolders if we implemented logic for it, but for now strict ID)
-    if (_selectedFolderId != null) {
-      temp = temp.where((r) => r.folderId == _selectedFolderId).toList();
+    if (mounted) {
+      setState(() {
+        _folders = folders;
+        _userName = name;
+      });
     }
-
-    // Filter by Tag
-    if (_activeFilterTag != null) {
-         temp = temp.where((r) => r.tags.contains(_activeFilterTag) || r.title.contains(_activeFilterTag!)).toList();
-    }
-
-    setState(() {
-      _filteredRecipes = temp;
-    });
   }
 
   Future<void> _openFolderManager() async {
     final isPremium = await _rcService.isPremium();
-    
     if (!isPremium) {
        if (mounted) Navigator.push(context, MaterialPageRoute(builder: (_) => const Paywall()));
        return;
     }
-
-    // Open Premium Folder Manager
     await Navigator.push(context, MaterialPageRoute(builder: (_) => const FolderManagerScreen()));
-    _loadData(); // Reload when coming back
+    _loadAuxData(); 
   }
 
   void _showFilterSheet() {
@@ -124,7 +95,6 @@ class _HomeScreenState extends State<HomeScreen> {
       selected: _activeFilterTag == val,
       onSelected: (selected) {
         setState(() => _activeFilterTag = selected ? val : null);
-        _filterRecipes();
         Navigator.pop(context);
       },
       selectedColor: const Color(0xFFC9A24D),
@@ -142,9 +112,8 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Dynamic Name
             Text('Hi $_userName,', style: const TextStyle(color: Color(0xFF2E2E2E), fontWeight: FontWeight.bold, fontSize: 22)),
-            const Text('Let\'s cook something real.', style: TextStyle(color: Colors.grey, fontSize: 14)),
+            const Text('Your Cloud Cookbook.', style: TextStyle(color: Colors.grey, fontSize: 14)),
           ],
         ),
         actions: [
@@ -154,38 +123,55 @@ class _HomeScreenState extends State<HomeScreen> {
           }),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFFC9A24D)))
-          : Column(
-              children: [
-                _buildFolderBar(),
-                Expanded(
-                  child: _filteredRecipes.isEmpty
-                    ? _buildEmptyState()
-                    : RefreshIndicator(
-                        onRefresh: _loadData,
-                        child: ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: _filteredRecipes.length,
-                          itemBuilder: (context, index) {
-                            return RecipeCard(recipe: _filteredRecipes[index], onTap: () async {
-                              await Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (_) => RecipeDetailScreen(recipe: _filteredRecipes[index])),
-                              );
-                              _loadData(); 
-                            });
-                          },
-                        ),
-                      ),
-                ),
-              ],
+      body: Column(
+        children: [
+          _buildFolderBar(),
+          Expanded(
+            child: StreamBuilder<List<Recipe>>(
+              stream: _supabase.getMyRecipesStream(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator(color: Color(0xFFC9A24D)));
+                }
+                
+                // DATA PROCESSING
+                List<Recipe> recipes = snapshot.data ?? [];
+                
+                // Client-side filtering
+                if (_selectedFolderId != null) {
+                   recipes = recipes.where((r) => r.folderId == _selectedFolderId).toList();
+                }
+                if (_activeFilterTag != null) {
+                   recipes = recipes.where((r) => 
+                     r.tags.contains(_activeFilterTag) || r.title.contains(_activeFilterTag!)
+                   ).toList();
+                }
+
+                if (recipes.isEmpty) {
+                  return _buildEmptyState();
+                }
+
+                return ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: recipes.length,
+                  itemBuilder: (context, index) {
+                    return RecipeCard(recipe: recipes[index], onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => RecipeDetailScreen(recipe: recipes[index])),
+                      );
+                    });
+                  },
+                );
+              },
             ),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: const Color(0xFFC9A24D),
-        onPressed: () async {
-          await Navigator.push(context, MaterialPageRoute(builder: (_) => const AddRecipeScreen()));
-          _loadData();
+        onPressed: () {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const AddRecipeScreen()));
         },
         label: const Text('Add Recipe', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         icon: const Icon(LucideIcons.plus, color: Colors.white),
@@ -194,11 +180,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildFolderBar() {
-    // Logic: Show Root folders only (parentId == null).
-    // Limit to 2 folders max + "More" button to avoid long queue.
     final rootFolders = _folders.where((f) => f.parentId == null).toList();
-    final displayFolders = rootFolders.take(2).toList();
-    final hasMore = rootFolders.length > 2;
+    final displayFolders = rootFolders.take(3).toList(); // Show a bit more
 
     return Container(
       height: 50,
@@ -210,11 +193,10 @@ class _HomeScreenState extends State<HomeScreen> {
           _buildFolderChip(null, "All Recipes"),
           ...displayFolders.map((f) => _buildFolderChip(f.id, f.name)),
           
-          // "More / Manage" Button
           Padding(
             padding: const EdgeInsets.only(left: 8),
             child: ActionChip(
-              label: Text(hasMore ? "+ ${rootFolders.length - 2} More" : "Folders"),
+              label: const Text("Folders"),
               avatar: const Icon(LucideIcons.folderCog, size: 16, color: Colors.black),
               onPressed: _openFolderManager,
               backgroundColor: Colors.white,
@@ -241,7 +223,6 @@ class _HomeScreenState extends State<HomeScreen> {
         onSelected: (val) {
           setState(() {
             _selectedFolderId = id;
-            _filterRecipes();
           });
         },
       ),
@@ -259,19 +240,17 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 24),
             Text(
               _activeFilterTag != null 
-                  ? 'No recipes found for "$_activeFilterTag".' 
-                  : 'Your kitchen is quiet.', 
+                  ? 'No recipes for "$_activeFilterTag".' 
+                  : 'Cloud Cookbook Empty.', 
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF2E2E2E))
             ),
             const SizedBox(height: 8),
             const Text(
-              "Start by adding a recipe via the button below.",
+              "Add a recipe to sync it to your account forever.",
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey),
             ),
-            // REMOVED: Redundant 'Add Recipe' button here. 
-            // The FloatingActionButton is sufficient and consistent.
           ],
         ),
       ),
@@ -337,8 +316,7 @@ class RecipeCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   
-                  // Author Info if available
-                  if (recipe.author != null)
+                  if (recipe.author != null && recipe.author != 'AI Chef')
                      Padding(
                        padding: const EdgeInsets.only(bottom: 6.0),
                        child: Text("by ${recipe.author}", style: const TextStyle(fontSize: 12, color: Color(0xFFC9A24D), fontStyle: FontStyle.italic)),

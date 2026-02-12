@@ -79,6 +79,7 @@ class _CookingModeScreenState extends State<CookingModeScreen> {
   Widget _buildCompletionDialog(BuildContext dialogContext) {
     final commentController = TextEditingController();
     bool shareMusic = true;
+    bool isPosting = false; // Local state for the dialog
 
     return StatefulBuilder(
       builder: (context, setState) {
@@ -128,18 +129,19 @@ class _CookingModeScreenState extends State<CookingModeScreen> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () {
+                      onPressed: isPosting ? null : () {
                         Navigator.pop(dialogContext); // Close sheet
                         Navigator.pop(context); // Close cooking screen
                       },
                       style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
-                      child: const Text("Keep Private", style: TextStyle(color: Colors.black)),
+                      child: const Text("Close (Keep Private)", style: TextStyle(color: Colors.black)),
                     ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () async {
+                      onPressed: isPosting ? null : () async {
+                        setState(() => isPosting = true);
                         try {
                           await SupabaseService().shareRecipeToCommunity(
                             widget.recipe, 
@@ -152,14 +154,20 @@ class _CookingModeScreenState extends State<CookingModeScreen> {
                             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Posted to Feed!")));
                           }
                         } catch (e) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+                          // Show a cleaner error message if something fails
+                          if (mounted) {
+                             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Upload Error: $e")));
+                             setState(() => isPosting = false);
+                          }
                         }
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFC9A24D),
                         padding: const EdgeInsets.symmetric(vertical: 16)
                       ),
-                      child: const Text("Post to Feed", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      child: isPosting 
+                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : const Text("Post to Feed", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ],

@@ -17,7 +17,6 @@ class CommunityScreen extends StatefulWidget {
 
 class _CommunityScreenState extends State<CommunityScreen> {
   final SupabaseService _supabase = SupabaseService();
-  final StorageService _storage = StorageService();
   final RevenueCatService _rc = RevenueCatService();
   bool _isPremium = false;
 
@@ -41,33 +40,27 @@ class _CommunityScreenState extends State<CommunityScreen> {
     try {
       final recipe = _getRecipeFromPost(post);
       
-      // Save Locally 
-      bool saved = await _storage.saveRecipe(recipe);
+      // Save to Cloud (My Recipes)
+      // This creates a private copy of the public recipe
+      final myCopy = recipe.copyWith(isPublic: false);
       
-      if (!saved) {
-        if (mounted) {
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const Paywall()));
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Library full. Upgrade to save more.")));
-        }
-        return;
-      }
+      await _supabase.saveRecipe(myCopy);
       
-      // NOTIFICATION LOGIC: Always send. Recipient's subscription determines if they see WHO sent it.
+      // NOTIFICATION LOGIC
       if (recipe.authorId != null) {
         await _supabase.notifyAuthor(recipe.authorId!, 'save', "saved your '${recipe.title}' recipe!");
       }
       
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Saved to your cookbook!")));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Saved to your Cloud Cookbook!")));
 
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Error saving recipe.")));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
     }
   }
 
   Future<void> _cookNow(Map<String, dynamic> post) async {
     final recipe = _getRecipeFromPost(post);
 
-    // NOTIFICATION LOGIC: Always send. Recipient's view handles censorship.
     if (recipe.authorId != null) {
        _supabase.notifyAuthor(recipe.authorId!, 'cook', "is cooking your '${recipe.title}' right now!");
     }
@@ -177,7 +170,8 @@ class _CommunityScreenState extends State<CommunityScreen> {
                         if (isAuthorPremium)
                           const Padding(
                             padding: EdgeInsets.only(left: 4),
-                            child: Icon(LucideIcons.verified, size: 14, color: Color(0xFFDAA520)),
+                            // Changed to standard Material Icon for reliability
+                            child: Icon(Icons.verified, size: 14, color: Color(0xFFDAA520)),
                           )
                       ],
                     ),

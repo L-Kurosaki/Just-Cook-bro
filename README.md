@@ -2,17 +2,25 @@
 
 Just Cook Bro is a smart cooking assistant rebuilt with Flutter.
 
-## 🚀 How to Download Your App (Free)
+## 🚀 How to Download Your App (APK)
 
-We use **GitHub Actions** to host and build your code for free.
+The Android app is built automatically by GitHub Actions. You can download the APK file from the **Artifacts** section of the build page.
 
-1. **Push this code** to GitHub.
-2. Go to the **Actions** tab in your repository.
-3. Look for the workflow named **"Build Android App (Free)"**.
-4. Click on it, wait for the build to finish (green checkmark).
-5. Scroll down to **Artifacts** and download **JustCookBro-APK**.
+### 📍 Where to find it
+**[Click here to go to the Build Page](https://github.com/L-Kurosaki/Just-Cook-bro/actions/runs/21965304667)**
 
-This APK is ready to drag-and-drop onto your Android emulator. It has backup API keys pre-configured, so it will work immediately.
+### 📝 Step-by-Step Instructions
+1. Click the link above to open the GitHub Actions run.
+2. **Scroll down** to the very bottom of that page.
+3. Look for the section titled **Artifacts**.
+4. Click on **JustCookBro-APK**. This will download a `.zip` file.
+5. **Unzip** the file to find `app-release.apk`.
+
+### 📱 How to Install
+*   **On Emulator:** Simply drag and drop `app-release.apk` onto your open Android Emulator window.
+*   **On Phone:** Send the file to your phone and tap it to install. (Ensure "Install from Unknown Sources" is enabled in settings).
+
+This APK has backup API keys pre-configured, so it will work immediately.
 
 ---
 

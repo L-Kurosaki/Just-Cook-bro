@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models.dart';
 import '../services/storage_service.dart';
 import '../services/supabase_service.dart';
@@ -80,6 +81,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if(mounted) setState(() => _uploading = false);
       }
     }
+  }
+
+  Future<void> _manageSubscription() async {
+    if (!_isPro) {
+      // Restore if not pro
+      await _rcService.restorePurchases();
+      _load();
+      return;
+    }
+
+    // Direct user to store to manage/cancel
+    showModalBottomSheet(
+      context: context, 
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("Manage Subscription", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            const Text("Subscriptions are managed by your app store. To cancel or change plans:", style: TextStyle(color: Colors.grey)),
+            const SizedBox(height: 20),
+            ListTile(
+              leading: const Icon(Icons.android, color: Colors.green),
+              title: const Text("Google Play Store"),
+              trailing: const Icon(LucideIcons.externalLink),
+              onTap: () {
+                launchUrl(Uri.parse("https://play.google.com/store/account/subscriptions"), mode: LaunchMode.externalApplication);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.apple, color: Colors.black),
+              title: const Text("Apple App Store"),
+              trailing: const Icon(LucideIcons.externalLink),
+              onTap: () {
+                launchUrl(Uri.parse("https://apps.apple.com/account/subscriptions"), mode: LaunchMode.externalApplication);
+              },
+            ),
+          ],
+        ),
+      )
+    );
   }
 
   Future<void> _editName() async {
@@ -268,17 +312,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             
             _buildSettingItem(
               LucideIcons.creditCard, 
-              'Manage Subscription', 
-              _isPro ? 'Active Premium' : 'Restore Purchases',
-              () async {
-                if (_isPro) {
-                  _rcService.showCustomerCenter();
-                } else {
-                  await _rcService.restorePurchases();
-                  _load();
-                  if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Restoration checked.")));
-                }
-              },
+              _isPro ? 'Manage Subscription' : 'Restore Purchases',
+              _isPro ? 'Cancel or change plan' : 'Check status',
+              _manageSubscription,
             ),
 
             _buildSettingItem(
