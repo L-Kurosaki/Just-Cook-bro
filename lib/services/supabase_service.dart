@@ -86,7 +86,6 @@ class SupabaseService {
     final uid = _supabase.auth.currentUser?.id;
     if (uid == null) return Stream.value([]);
 
-    // We check 'user_id' OR 'author_id' to be safe, but primarily 'user_id' is the owner
     return _supabase
         .from('recipes')
         .stream(primaryKey: ['id'])
@@ -113,7 +112,7 @@ class SupabaseService {
     // Ensure critical fields for cloud
     final data = {
       'id': recipe.id,
-      'user_id': user.id, // CRITICAL FIX: Explicitly set user_id
+      'user_id': user.id, 
       'title': recipe.title,
       'content': recipeJson,
       'author_id': user.id,
@@ -144,17 +143,13 @@ class SupabaseService {
     await _supabase.from('recipes').delete().eq('id', recipeId);
   }
 
-  // --- COMMUNITY FEED (REAL TIME) ---
+  // --- COMMUNITY FEED (FETCH) ---
 
   Future<void> shareRecipeToCommunity(Recipe recipe, String caption, {List<SpotifyTrack>? musicSession}) async {
-    // Just update the existing recipe to be public and have a caption
     final user = _supabase.auth.currentUser;
     if (user == null) throw Exception("Must be logged in");
 
-    // We can just reuse saveRecipe but force is_public = true
     final publicVersion = recipe.copyWith(isPublic: true);
-    
-    // We update the table specifically to set caption and public
     final isPremium = await RevenueCatService().isPremium();
     final recipeJson = publicVersion.toJson();
     if (musicSession != null) {
@@ -163,7 +158,7 @@ class SupabaseService {
 
     final data = {
       'id': recipe.id,
-      'user_id': user.id, // CRITICAL FIX: Explicitly set user_id
+      'user_id': user.id, 
       'content': recipeJson,
       'author_id': user.id,
       'author_name': user.userMetadata?['full_name'] ?? 'Chef',
@@ -176,17 +171,20 @@ class SupabaseService {
     await _supabase.from('recipes').upsert(data);
   }
 
-  Stream<List<Map<String, dynamic>>> getCommunityFeedStream() {
-    return _supabase
-        .from('recipes')
-        .stream(primaryKey: ['id'])
-        .eq('is_public', true)
-        .order('created_at', ascending: false)
-        .map((data) => List<Map<String, dynamic>>.from(data))
-        .handleError((error) {
-           print("Stream Error (likely missing table): $error");
-           return <Map<String, dynamic>>[]; 
-        });
+  // CHANGED: Use Future instead of Stream to avoid Realtime config issues
+  Future<List<Map<String, dynamic>>> getCommunityFeed() async {
+    try {
+      final response = await _supabase
+          .from('recipes')
+          .select()
+          .eq('is_public', true)
+          .order('created_at', ascending: false); // Newest first
+          
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print("Error loading feed: $e");
+      return [];
+    }
   }
 
   // --- INTERACTIONS & NOTIFICATIONS ---
