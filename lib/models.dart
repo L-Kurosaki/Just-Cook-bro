@@ -160,6 +160,7 @@ class Recipe {
   };
   
   Recipe copyWith({
+    String? id, // Added ID so we can clone recipes with new IDs
     String? title,
     String? description,
     String? prepTime,
@@ -180,7 +181,7 @@ class Recipe {
     List<String>? allergens,
   }) {
     return Recipe(
-      id: id,
+      id: id ?? this.id,
       title: title ?? this.title,
       description: description ?? this.description,
       prepTime: prepTime ?? this.prepTime,
@@ -206,7 +207,7 @@ class Recipe {
 class Folder {
   final String id;
   final String name;
-  final String? parentId; // Added for nesting
+  final String? parentId; 
 
   Folder({String? id, required this.name, this.parentId}) : id = id ?? uuid.v4();
 
