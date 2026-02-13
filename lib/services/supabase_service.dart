@@ -243,7 +243,23 @@ class SupabaseService {
       };
       
       current.add(newInteraction);
-      await _supabase.from('recipes').update({'comments': current}).eq('id', recipeId);
+      
+      // CALCULATE AVERAGE
+      double totalRating = 0;
+      int count = 0;
+      for (var r in current) {
+         if (r['rating'] != null) {
+            totalRating += (r['rating'] as num).toDouble();
+            count++;
+         }
+      }
+      int average = count > 0 ? (totalRating / count).round() : 0;
+
+      // Update both comments array AND the main rating column
+      await _supabase.from('recipes').update({
+        'comments': current,
+        'rating': average
+      }).eq('id', recipeId);
 
       String notifMsg = "rated your recipe $rating stars";
       if (comment != null && comment.isNotEmpty) {
