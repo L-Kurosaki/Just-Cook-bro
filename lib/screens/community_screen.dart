@@ -33,18 +33,27 @@ class _CommunityScreenState extends State<CommunityScreen> {
 
   Recipe _getRecipeFromPost(Map<String, dynamic> post) {
     Recipe original = Recipe.fromJson(post['content']);
-    return original.copyWith(authorId: post['author_id']);
+    // Ensure we keep the public rating visible locally
+    return original.copyWith(
+      authorId: post['author_id'],
+      rating: post['rating'] // Sync the rating from the DB column
+    );
   }
 
   Future<void> _saveRecipe(Map<String, dynamic> post) async {
     try {
       final recipe = _getRecipeFromPost(post);
       
-      // Save to Cloud (My Recipes)
-      final myCopy = recipe.copyWith(isPublic: false);
+      // FIX: Generate a NEW ID for the personal copy to avoid RLS violation (42501)
+      // We are creating a NEW row in the DB owned by the current user.
+      final myCopy = recipe.copyWith(
+        id: uuid.v4(), 
+        isPublic: false
+      );
       
       await _supabase.saveRecipe(myCopy);
       
+      // Notify original author
       if (recipe.authorId != null) {
         await _supabase.notifyAuthor(recipe.authorId!, 'save', "saved your '${recipe.title}' recipe!");
       }
@@ -77,7 +86,10 @@ class _CommunityScreenState extends State<CommunityScreen> {
         isPremium: _isPremium,
         onSubmit: (rating, comment) async {
           await _supabase.addCommentOrRating(post['id'].toString(), post['author_id'], rating, comment);
-          if (mounted) Navigator.pop(context);
+          if (mounted) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Rating submitted!")));
+          }
         }
       )
     );
@@ -141,6 +153,9 @@ class _CommunityScreenState extends State<CommunityScreen> {
     final author = post['author_name'] as String? ?? 'Chef';
     final isAuthorPremium = post['author_is_premium'] == true;
     final date = DateTime.tryParse(post['created_at']) ?? DateTime.now();
+    
+    // Display average rating from DB if available
+    final rating = post['rating'] ?? 0;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 24),
@@ -186,6 +201,19 @@ class _CommunityScreenState extends State<CommunityScreen> {
                     Text("${date.hour}:${date.minute.toString().padLeft(2,'0')} • Today", style: const TextStyle(color: Colors.grey, fontSize: 12)),
                   ],
                 ),
+                const Spacer(),
+                if (rating > 0)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(color: const Color(0xFFFFF8E1), borderRadius: BorderRadius.circular(8)),
+                    child: Row(
+                      children: [
+                        const Icon(LucideIcons.star, size: 14, color: Color(0xFFC9A24D)),
+                        const SizedBox(width: 4),
+                        Text(rating.toString(), style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFC9A24D))),
+                      ],
+                    ),
+                  )
               ],
             ),
           ),
