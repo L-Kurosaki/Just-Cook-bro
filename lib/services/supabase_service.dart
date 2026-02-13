@@ -86,13 +86,13 @@ class SupabaseService {
     final uid = _supabase.auth.currentUser?.id;
     if (uid == null) return Stream.value([]);
 
+    // We check 'user_id' OR 'author_id' to be safe, but primarily 'user_id' is the owner
     return _supabase
         .from('recipes')
         .stream(primaryKey: ['id'])
-        .eq('author_id', uid)
+        .eq('user_id', uid) 
         .order('created_at', ascending: false)
         .map((data) => data.map((json) {
-           // Ensure ID is string
            return Recipe.fromJson(json);
         }).toList())
         .handleError((e) {
@@ -113,14 +113,14 @@ class SupabaseService {
     // Ensure critical fields for cloud
     final data = {
       'id': recipe.id,
+      'user_id': user.id, // CRITICAL FIX: Explicitly set user_id
       'title': recipe.title,
       'content': recipeJson,
       'author_id': user.id,
       'author_name': user.userMetadata?['full_name'] ?? 'Chef',
       'author_is_premium': isPremium,
-      'is_public': recipe.isPublic, // Respect the recipe's visibility
+      'is_public': recipe.isPublic, 
       'caption': recipe.description,
-      // 'comments': [], // Don't overwrite comments if updating
       'created_at': DateTime.now().toIso8601String(),
     };
 
@@ -163,6 +163,7 @@ class SupabaseService {
 
     final data = {
       'id': recipe.id,
+      'user_id': user.id, // CRITICAL FIX: Explicitly set user_id
       'content': recipeJson,
       'author_id': user.id,
       'author_name': user.userMetadata?['full_name'] ?? 'Chef',
