@@ -101518,7 +101518,7 @@ q=q==null?null:q.r
 s=q==null?null:q.a
 if(s==null)return A.aOQ(A.b([],t.TQ),t.Qw)
 r=r.jR("recipes").Hh(0,A.b(["id"],t.s))
-r.z=new A.Ls("author_id",s,B.mF)
+r.z=new A.Ls("user_id",s,B.mF)
 r.Q=new A.JS("created_at",!1)
 return new A.nR(new A.atb(),r,A.u(r).i("nR<bX.T,C<dI>>")).yj(new A.atc())},
 hJ(a){return this.a6I(a)},
@@ -101536,7 +101536,7 @@ g=f.a
 j=f.c
 j=j==null?null:J.ac(j,"full_name")
 if(j==null)j="Chef"
-n=A.W(["id",a.a,"title",a.b,"content",k,"author_id",g,"author_name",j,"author_is_premium",l,"is_public",a.Q,"caption",a.c,"created_at",new A.cV(Date.now(),0,!1).qQ()],t.N,t.z)
+n=A.W(["id",a.a,"user_id",g,"title",a.b,"content",k,"author_id",g,"author_name",j,"author_is_premium",l,"is_public",a.Q,"caption",a.c,"created_at",new A.cV(Date.now(),0,!1).qQ()],t.N,t.z)
 q=4
 s=7
 return A.m(h.jR("recipes").PR(n),$async$hJ)
@@ -101588,7 +101588,7 @@ n.n(0,"musicSession",j)}j=i.a
 m=i.c
 m=m==null?null:J.ac(m,"full_name")
 if(m==null)m="Chef"
-l=A.W(["id",a.a,"content",n,"author_id",j,"author_name",m,"author_is_premium",o,"is_public",!0,"caption",b,"created_at",new A.cV(Date.now(),0,!1).qQ()],t.N,t.z)
+l=A.W(["id",a.a,"user_id",j,"content",n,"author_id",j,"author_name",m,"author_is_premium",o,"is_public",!0,"caption",b,"created_at",new A.cV(Date.now(),0,!1).qQ()],t.N,t.z)
 s=3
 return A.m(k.jR("recipes").PR(l),$async$ra)
 case 3:return A.p(null,r)}})
