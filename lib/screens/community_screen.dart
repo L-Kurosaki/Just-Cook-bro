@@ -41,12 +41,10 @@ class _CommunityScreenState extends State<CommunityScreen> {
       final recipe = _getRecipeFromPost(post);
       
       // Save to Cloud (My Recipes)
-      // This creates a private copy of the public recipe
       final myCopy = recipe.copyWith(isPublic: false);
       
       await _supabase.saveRecipe(myCopy);
       
-      // NOTIFICATION LOGIC
       if (recipe.authorId != null) {
         await _supabase.notifyAuthor(recipe.authorId!, 'save', "saved your '${recipe.title}' recipe!");
       }
@@ -101,27 +99,38 @@ class _CommunityScreenState extends State<CommunityScreen> {
             )
         ],
       ),
-      body: StreamBuilder<List<Map<String, dynamic>>>(
-        stream: _supabase.getCommunityFeedStream(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: Color(0xFFC9A24D)));
-          }
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(child: Text("No posts yet. Share your recipes!"));
-          }
-
-          final posts = snapshot.data!;
-
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: posts.length,
-            itemBuilder: (context, index) {
-              final post = posts[index];
-              return _buildPostCard(post);
-            },
-          );
+      body: RefreshIndicator(
+        color: const Color(0xFFC9A24D),
+        onRefresh: () async {
+          setState(() {}); // Triggers FutureBuilder to reload
         },
+        child: FutureBuilder<List<Map<String, dynamic>>>(
+          future: _supabase.getCommunityFeed(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator(color: Color(0xFFC9A24D)));
+            }
+            if (!snapshot.hasData || snapshot.data!.isEmpty) {
+              return ListView(
+                children: const [
+                   SizedBox(height: 100),
+                   Center(child: Text("No posts yet. Pull to refresh!", style: TextStyle(color: Colors.grey))),
+                ],
+              );
+            }
+
+            final posts = snapshot.data!;
+
+            return ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: posts.length,
+              itemBuilder: (context, index) {
+                final post = posts[index];
+                return _buildPostCard(post);
+              },
+            );
+          },
+        ),
       ),
     );
   }
@@ -130,7 +139,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
     final recipe = _getRecipeFromPost(post);
     final caption = post['caption'] as String?;
     final author = post['author_name'] as String? ?? 'Chef';
-    final isAuthorPremium = post['author_is_premium'] == true; // Check if author is Gold
+    final isAuthorPremium = post['author_is_premium'] == true;
     final date = DateTime.tryParse(post['created_at']) ?? DateTime.now();
 
     return Container(
@@ -164,13 +173,12 @@ class _CommunityScreenState extends State<CommunityScreen> {
                           style: TextStyle(
                             fontWeight: FontWeight.bold, 
                             fontSize: 16,
-                            color: isAuthorPremium ? const Color(0xFFDAA520) : Colors.black // Gold text for Premium authors
+                            color: isAuthorPremium ? const Color(0xFFDAA520) : Colors.black
                           )
                         ),
                         if (isAuthorPremium)
                           const Padding(
                             padding: EdgeInsets.only(left: 4),
-                            // Changed to standard Material Icon for reliability
                             child: Icon(Icons.verified, size: 14, color: Color(0xFFDAA520)),
                           )
                       ],
