@@ -7,7 +7,7 @@ Just Cook Bro is a smart cooking assistant rebuilt with Flutter.
 The Android app is built automatically by GitHub Actions. You can download the APK file from the **Artifacts** section of the build page.
 
 ### 📍 Where to find it
-**[Click here to go to the Build Page](https://github.com/L-Kurosaki/Just-Cook-bro/actions/runs/21968217256)**
+**[Click here to go to the Build Page](https://github.com/L-Kurosaki/Just-Cook-bro/actions/runs/21973028464)**
 
 ### 📝 Step-by-Step Instructions
 1. Click the link above to open the GitHub Actions run.
