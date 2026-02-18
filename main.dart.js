@@ -101410,7 +101410,7 @@ return s.length!==0?r+(" CRITICAL WARNING: The user is ALLERGIC to: "+B.b.b8(s,"
 zF(a,b){return this.a67(a,b)},
 a67(a,b){var s=0,r=A.r(t.jh),q,p=2,o=[],n=this,m,l,k,j,i,h,g,f,e,d,c
 var $async$zF=A.n(function(a0,a1){if(a0===1){o.push(a1)
-s=p}for(;;)switch(s){case 0:if($.Nv().length===0)throw A.e(A.ct("API Key is missing. Please check GitHub Secrets configuration."))
+s=p}for(;;)switch(s){case 0:if($.Nv().length===0)throw A.e(A.ct("API Key is missing. Check GitHub 'GEMINI_API_KEY' environment."))
 m='Create a detailed cooking recipe for: "'+a+'".'
 if(B.c.p(a.toLowerCase(),"http")){m='Analyze this link/video: "'+a+'". Extract the recipe from the title, captions, or context. Credit the domain in sourceUrl.'
 f=a}else f=""
@@ -101440,8 +101440,8 @@ case 4:p=3
 c=o.pop()
 g=A.a7(c)
 A.ic("Gemini failed: "+A.j(g))
-if(B.c.p(J.c1(g),"API_KEY_INVALID"))throw A.e(A.ct("The API Key is invalid or expired."))
-if(B.c.p(J.c1(g),"403"))throw A.e(A.ct("API Permission Denied (403). Check quotas."))
+if(B.c.p(J.c1(g),"API_KEY_INVALID"))throw A.e(A.ct("Invalid API Key. Please check the key in GitHub Secrets."))
+if(B.c.p(J.c1(g),"429"))throw A.e(A.ct("Quota exceeded. The API key has reached its limit."))
 throw A.e(A.ct("AI Error: "+B.c.lK(B.c.aEm(J.c1(g),"Exception:",""))))
 s=6
 break
