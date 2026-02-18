@@ -31,8 +31,16 @@ class GeminiService {
   late final GenerativeModel _visionModel;
 
   GeminiService() {
-    // Initialize models. If key is missing, specific methods will throw clearer errors.
-    _model = GenerativeModel(model: 'gemini-3-flash-preview', apiKey: _apiKey);
+    // Initialize models with Google Search Tool enabled for better link/fact checking
+    _model = GenerativeModel(
+      model: 'gemini-3-flash-preview', 
+      apiKey: _apiKey,
+      tools: [
+        Tool(googleSearch: GoogleSearch())
+      ],
+    );
+    
+    // Vision model does not use search tools
     _visionModel = GenerativeModel(model: 'gemini-3-flash-preview', apiKey: _apiKey);
   }
 
@@ -83,19 +91,24 @@ class GeminiService {
       throw Exception("API Key is missing. Check GitHub 'GEMINI_API_KEY' environment.");
     }
 
-    String fullPrompt = 'Create a detailed cooking recipe for: "$prompt".';
+    String fullPrompt = "";
     String sourceUrl = "";
 
-    if (prompt.toLowerCase().contains('http')) {
-      fullPrompt = 'Analyze this link/video: "$prompt". Extract the recipe from the title, captions, or context. Credit the domain in sourceUrl.';
+    // Specific logic for Links
+    if (prompt.toLowerCase().contains('http') || prompt.toLowerCase().contains('www.')) {
+      fullPrompt = 'Use Google Search to find the recipe details for this video or link: "$prompt". '
+          'Extract the ingredients and cooking steps accurately from the search results. '
+          'Credit the source domain in sourceUrl. ';
       sourceUrl = prompt;
-    } 
+    } else {
+      fullPrompt = 'Create a detailed cooking recipe for: "$prompt". ';
+    }
 
     fullPrompt += _buildPreferencePrompt(profile);
     fullPrompt += ' Return strict JSON: $_recipeSchema. ';
     
     if (sourceUrl.isNotEmpty) {
-      fullPrompt += 'Set "author" to the original creator if known, otherwise "Web Source". Set "sourceUrl" to "$sourceUrl". ';
+      fullPrompt += 'Set "author" to the original creator if found via search, otherwise "Web Source". Set "sourceUrl" to "$sourceUrl". ';
     } else {
       fullPrompt += 'Set "author" to "AI Chef". ';
     }
@@ -103,6 +116,7 @@ class GeminiService {
     try {
       final content = [Content.text(fullPrompt)];
       final response = await _model.generateContent(content);
+      
       final text = response.text;
       if (text == null) throw Exception("Empty AI response");
       
