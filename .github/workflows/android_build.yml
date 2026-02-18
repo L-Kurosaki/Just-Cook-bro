@@ -8,6 +8,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # CRITICAL FIX: This tells GitHub to unlock the secrets located in the 'GEMINI_API_KEY' environment
+    environment: GEMINI_API_KEY
 
     steps:
       - name: Checkout Code
@@ -24,7 +26,6 @@ jobs:
         with:
           channel: 'stable'
 
-      # FIX: Generate the missing 'android' folder structure
       - name: Create Android Platform Files
         run: flutter create . --platforms android
 
