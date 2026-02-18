@@ -91,8 +91,19 @@ class SupabaseService {
         .stream(primaryKey: ['id'])
         .eq('user_id', uid) 
         .order('created_at', ascending: false)
-        .map((data) => data.map((json) {
-           return Recipe.fromJson(json);
+        .map((data) => data.map((row) {
+           // CRITICAL FIX: The recipe details (ingredients, steps) are stored inside the 'content' JSON column.
+           // We must merge that JSON with the top-level row data so Recipe.fromJson finds the fields.
+           final content = row['content'] as Map<String, dynamic>? ?? {};
+           
+           // Create a new map merging top-level DB fields with the stored content
+           final mergedData = Map<String, dynamic>.from(content);
+           mergedData['id'] = row['id']; // Ensure ID matches DB
+           mergedData['title'] = row['title']; // Ensure Title matches DB
+           mergedData['author_id'] = row['author_id'];
+           mergedData['is_public'] = row['is_public'];
+
+           return Recipe.fromJson(mergedData);
         }).toList())
         .handleError((e) {
            print("Error fetching my recipes: $e");
@@ -114,7 +125,7 @@ class SupabaseService {
       'id': recipe.id,
       'user_id': user.id, 
       'title': recipe.title,
-      'content': recipeJson,
+      'content': recipeJson, // We store the full object here
       'author_id': user.id,
       'author_name': user.userMetadata?['full_name'] ?? 'Chef',
       'author_is_premium': isPremium,
@@ -140,7 +151,12 @@ class SupabaseService {
   }
 
   Future<void> deleteRecipe(String recipeId) async {
-    await _supabase.from('recipes').delete().eq('id', recipeId);
+    try {
+      await _supabase.from('recipes').delete().eq('id', recipeId);
+    } catch (e) {
+      print("Error deleting recipe: $e");
+      throw Exception("Failed to delete recipe from cloud.");
+    }
   }
 
   // --- COMMUNITY FEED (FETCH) ---
@@ -171,7 +187,6 @@ class SupabaseService {
     await _supabase.from('recipes').upsert(data);
   }
 
-  // CHANGED: Use Future instead of Stream to avoid Realtime config issues
   Future<List<Map<String, dynamic>>> getCommunityFeed() async {
     try {
       final response = await _supabase
