@@ -1,389 +1,441 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import '../models.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:uuid/uuid.dart';
 import '../services/gemini_service.dart';
 import '../services/storage_service.dart';
-import '../services/revenue_cat_service.dart';
 import '../services/supabase_service.dart';
-import 'cooking_mode_screen.dart';
-import '../widgets/review_section.dart';
+import '../services/revenue_cat_service.dart';
+import '../models.dart';
 import '../widgets/paywall.dart';
+import 'cooking_mode_screen.dart';
 
-class RecipeDetailScreen extends StatefulWidget {
-  final Recipe recipe;
-
-  const RecipeDetailScreen({super.key, required this.recipe});
+class AddRecipeScreen extends StatefulWidget {
+  const AddRecipeScreen({super.key});
 
   @override
-  State<RecipeDetailScreen> createState() => _RecipeDetailScreenState();
+  State<AddRecipeScreen> createState() => _AddRecipeScreenState();
 }
 
-class _RecipeDetailScreenState extends State<RecipeDetailScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  late Recipe _recipe;
+class _AddRecipeScreenState extends State<AddRecipeScreen> with SingleTickerProviderStateMixin {
+  final TextEditingController _textController = TextEditingController();
   final GeminiService _gemini = GeminiService();
   final StorageService _storage = StorageService();
-  final RevenueCatService _rc = RevenueCatService();
   final SupabaseService _supabase = SupabaseService();
+  final RevenueCatService _rc = RevenueCatService();
   
+  late TabController _tabController;
+  bool _loading = false;
+  String _statusMessage = "";
   UserProfile? _userProfile;
-  bool _isPremium = false;
+  
+  // Image Flow State
+  Uint8List? _selectedImage;
+  List<String> _recipeOptions = [];
+  bool _showOptions = false;
+
+  // Manual Entry State
+  final _titleController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  final _prepTimeController = TextEditingController();
+  final _cookTimeController = TextEditingController();
+  final _servingsController = TextEditingController();
+  
+  final List<Ingredient> _manualIngredients = [];
+  final List<Step> _manualSteps = [];
+  final _ingredientNameController = TextEditingController();
+  final _ingredientAmountController = TextEditingController();
+  final _stepController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _recipe = widget.recipe;
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this); // Changed to 3 tabs
     _loadProfile();
   }
 
   Future<void> _loadProfile() async {
-    final p = await _storage.getProfile();
-    final premium = await _rc.isPremium();
-    setState(() {
-      _userProfile = p;
-      _isPremium = premium;
-    });
+    _userProfile = await _storage.getProfile();
   }
 
-  Future<void> _findStores(String ingredient) async {
-    showModalBottomSheet(
-      context: context, 
-      backgroundColor: Colors.white,
+  Future<void> _generateFromText() async {
+    if (_textController.text.isEmpty) return;
+    
+    setState(() { _loading = true; _statusMessage = "Analyzing input & Preferences..."; });
+    try {
+      final recipe = await _gemini.generateRecipeFromText(
+        _textController.text, 
+        profile: _userProfile
+      );
+      await _handleGeneratedRecipe(recipe);
+    } catch (e) {
+      _showError(e.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _pickImage() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+    if (image != null) {
+      final bytes = await image.readAsBytes();
+      setState(() {
+        _selectedImage = bytes;
+        _showOptions = false;
+        _recipeOptions = [];
+      });
+      _analyzeImage(bytes);
+    }
+  }
+
+  Future<void> _analyzeImage(Uint8List bytes) async {
+    setState(() { _loading = true; _statusMessage = "Analyzing image..."; });
+    try {
+      final options = await _gemini.generateOptionsFromImage(bytes);
+      setState(() {
+        _recipeOptions = options.take(6).toList();
+        _showOptions = true;
+        _loading = false;
+      });
+    } catch (e) {
+      _showError("Could not identify food. Try a clearer photo.");
+      setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _generateFromOption(String option) async {
+    setState(() { _loading = true; _statusMessage = "Chef AI is cooking '$option'..."; });
+    try {
+      final recipe = await _gemini.generateRecipeFromOption(
+        option, 
+        _selectedImage!,
+        profile: _userProfile
+      );
+      await _handleGeneratedRecipe(recipe);
+    } catch (e) {
+       _showError(e.toString());
+       setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _saveManualRecipe() async {
+    if (_titleController.text.isEmpty) {
+      _showError("Title is required");
+      return;
+    }
+    if (_manualIngredients.isEmpty || _manualSteps.isEmpty) {
+      _showError("Add at least one ingredient and one step");
+      return;
+    }
+
+    final recipe = Recipe(
+      id: const Uuid().v4(),
+      title: _titleController.text,
+      description: _descriptionController.text.isEmpty ? "My custom recipe" : _descriptionController.text,
+      prepTime: _prepTimeController.text.isEmpty ? "10m" : _prepTimeController.text,
+      cookTime: _cookTimeController.text.isEmpty ? "20m" : _cookTimeController.text,
+      servings: int.tryParse(_servingsController.text) ?? 2,
+      ingredients: _manualIngredients,
+      steps: _manualSteps,
+      author: _userProfile?.name ?? "Me",
+      isPremium: false,
+    );
+
+    await _handleGeneratedRecipe(recipe);
+  }
+
+  Future<void> _handleGeneratedRecipe(Recipe recipe) async {
+    // 1. Save to Cloud (Supabase)
+    try {
+      await _supabase.saveRecipe(recipe);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Cloud Save Failed: $e")));
+      return;
+    }
+
+    if (!mounted) return;
+
+    // 2. Ask User: Cook Now or Later?
+    await showModalBottomSheet(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(20),
-        height: 400,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text("Find '$ingredient' Nearby", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 10),
-            const Text("Locating best shops...", style: TextStyle(color: Colors.grey)),
-            const SizedBox(height: 20),
-            Expanded(
-              child: FutureBuilder<List<Map<String, String>>>(
-                future: _gemini.findShopsNearby(ingredient),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator(color: Color(0xFFC9A24D)));
-                  }
-                  if (snapshot.hasError) return const Text("Could not find location data.");
-                  
-                  final shops = snapshot.data ?? [];
-                  return ListView.separated(
-                    itemCount: shops.length,
-                    separatorBuilder: (_,__) => const Divider(),
-                    itemBuilder: (ctx, i) {
-                       return ListTile(
-                         leading: Container(
-                           padding: const EdgeInsets.all(8),
-                           decoration: BoxDecoration(color: const Color(0xFFF3F4F6), borderRadius: BorderRadius.circular(8)),
-                           child: const Icon(LucideIcons.store, color: Color(0xFFC9A24D)),
-                         ),
-                         title: Text(shops[i]['name']!),
-                         subtitle: Text(shops[i]['vicinity']!),
-                         trailing: const Icon(LucideIcons.mapPin),
-                       );
-                    },
-                  );
-                },
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_done, size: 48, color: Colors.green),
+              const SizedBox(height: 16),
+              const Text("Saved to Cloud!", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              const Text("This recipe is now on your account.", style: TextStyle(color: Colors.grey)),
+              const SizedBox(height: 24),
+              
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx); 
+                    Navigator.pushReplacement(
+                      context, 
+                      MaterialPageRoute(builder: (_) => CookingModeScreen(recipe: recipe))
+                    );
+                  }, 
+                  icon: const Icon(LucideIcons.flame, color: Colors.white),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFC9A24D),
+                    padding: const EdgeInsets.symmetric(vertical: 16)
+                  ),
+                  label: const Text("Cook Now", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold))
+                ),
               ),
-            )
-          ],
-        ),
-      )
-    );
-  }
-
-  Future<void> _deleteRecipe() async {
-    bool canDelete = await _storage.deleteRecipe(_recipe.id);
-    if (!mounted) return;
-    
-    if (canDelete) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Recipe deleted.')));
-    } else {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => const Paywall()));
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Free limit reached. Upgrade to delete more.')));
-    }
-  }
-
-  Future<void> _shareToCommunity() async {
-    final controller = TextEditingController();
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Post to Community Feed"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text("Share this recipe with everyone!"),
-            const SizedBox(height: 10),
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(
-                hintText: "Add a caption (e.g. 'Turned out great!')",
-                border: OutlineInputBorder()
+              const SizedBox(height: 12),
+              
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    await _storage.addIngredientsToShop(recipe.ingredients);
+                    if(mounted) {
+                      Navigator.pop(ctx); 
+                      Navigator.pop(context); 
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Ingredients added to Shop List")));
+                    }
+                  }, 
+                  icon: const Icon(LucideIcons.shoppingBag, color: Colors.black),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16)
+                  ),
+                  label: const Text("Add to Shopping List", style: TextStyle(color: Colors.black, fontSize: 16))
+                ),
               ),
-              maxLines: 2,
-            )
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                await _supabase.shareRecipeToCommunity(_recipe, controller.text);
-                if(mounted) {
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Posted successfully!")));
-                }
-              } catch(e) {
-                if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
-              }
-            }, 
-            child: const Text("Post")
-          )
-        ],
-      )
-    );
-  }
-
-  Future<void> _addToFolder() async {
-    final isPremium = await _rc.isPremium();
-    if (!isPremium) {
-       if (mounted) Navigator.push(context, MaterialPageRoute(builder: (_) => const Paywall()));
-       return;
-    }
-
-    final folders = await _storage.getFolders();
-    if (!mounted) return;
-    
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-           const Text("Move to Folder", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-           const SizedBox(height: 10),
-           ...folders.map((f) => ListTile(
-             title: Text(f.name),
-             leading: const Icon(LucideIcons.folder),
-             onTap: () async {
-               final updated = _recipe.copyWith(folderId: f.id);
-               await _storage.saveRecipe(updated);
-               setState(() => _recipe = updated);
-               Navigator.pop(ctx);
-             },
-           ))
-        ],
-      )
-    );
-  }
-
-  bool _hasSafetyWarning() {
-    if (_recipe.allergens.isNotEmpty) return true;
-    if (_userProfile == null) return false;
-    for (var allergy in _userProfile!.allergies) {
-      if (_recipe.allergens.map((a) => a.toLowerCase()).contains(allergy.toLowerCase())) {
-        return true;
+            ],
+          ),
+        );
       }
-    }
-    return false;
+    );
   }
 
-  Future<void> _startCooking() async {
-    // NOTIFICATION LOGIC: Always send if Author exists.
-    // The recipient (the author) will experience censorship in their app if they are Basic.
-    // We do NOT censor the *sending* process anymore.
-    if (_recipe.authorId != null && _recipe.authorId != _supabase.userId) {
-       _supabase.notifyAuthor(_recipe.authorId!, 'cook', "is cooking your '${_recipe.title}'!");
-    }
+  void _showError(String err) {
+    if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+  }
 
-    if (!mounted) return;
-    Navigator.push(context, MaterialPageRoute(builder: (_) => CookingModeScreen(recipe: _recipe)));
+  void _addManualIngredient() {
+    if (_ingredientNameController.text.isNotEmpty) {
+      setState(() {
+        _manualIngredients.add(Ingredient(
+          name: _ingredientNameController.text,
+          amount: _ingredientAmountController.text.isEmpty ? "Some" : _ingredientAmountController.text
+        ));
+        _ingredientNameController.clear();
+        _ingredientAmountController.clear();
+      });
+    }
+  }
+
+  void _addManualStep() {
+    if (_stepController.text.isNotEmpty) {
+      setState(() {
+        _manualSteps.add(Step(instruction: _stepController.text));
+        _stepController.clear();
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    bool unsafe = _hasSafetyWarning();
-
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            expandedHeight: 300,
-            pinned: true,
-            backgroundColor: Colors.black,
-            actions: [
-               IconButton(icon: const Icon(LucideIcons.share2), onPressed: _shareToCommunity),
-               IconButton(icon: const Icon(LucideIcons.folderInput), onPressed: _addToFolder),
-               IconButton(icon: const Icon(LucideIcons.trash2, color: Colors.red), onPressed: _deleteRecipe),
+      appBar: AppBar(
+        title: const Text('New Recipe'),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.black),
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: const Color(0xFFC9A24D),
+          unselectedLabelColor: Colors.grey,
+          indicatorColor: const Color(0xFFC9A24D),
+          tabs: const [
+            Tab(text: "AI Chef"),
+            Tab(text: "Scan"),
+            Tab(text: "Manual"),
+          ],
+        ),
+      ),
+      body: _loading 
+        ? Center(child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(color: Color(0xFFC9A24D)),
+              const SizedBox(height: 16),
+              Text(_statusMessage, style: const TextStyle(color: Colors.grey))
             ],
-            flexibleSpace: FlexibleSpaceBar(
-              background: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (_recipe.imageUrl != null)
-                    Image.network(_recipe.imageUrl!, fit: BoxFit.cover),
-                  Container(color: Colors.black.withOpacity(0.3)),
-                ],
-              ),
+          ))
+        : TabBarView(
+            controller: _tabController,
+            children: [
+              _buildTextTab(),
+              _buildImageTab(),
+              _buildManualTab(),
+            ],
+          ),
+    );
+  }
+
+  Widget _buildTextTab() {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('Enter details or paste a video link', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _textController,
+            maxLines: 4,
+            decoration: InputDecoration(
+              hintText: 'e.g. "Spicy pasta" or paste a YouTube link...',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              filled: true,
+              fillColor: const Color(0xFFF3F4F6),
             ),
           ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (unsafe)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 20),
-                      padding: const EdgeInsets.all(16),
-                      width: double.infinity,
-                      decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.red, width: 2)),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Row(children: [
-                            Icon(LucideIcons.alertTriangle, color: Colors.red, size: 24),
-                            SizedBox(width: 8),
-                            Text("ALLERGY ALERT", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 18))
-                          ]),
-                          const SizedBox(height: 8),
-                          Text(
-                            "This recipe contains: ${_recipe.allergens.join(', ')}",
-                            style: const TextStyle(color: Colors.red, fontSize: 16, fontWeight: FontWeight.w600)
-                          ),
-                        ],
-                      ),
-                    ),
-                  
-                  Text(_recipe.title, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  
-                  if (_recipe.sourceUrl != null && _recipe.sourceUrl!.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8.0),
-                      child: Row(
-                        children: [
-                           const Icon(LucideIcons.link, size: 14, color: Colors.blue),
-                           const SizedBox(width: 4),
-                           Expanded(child: Text("Source: ${_recipe.sourceUrl}", style: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline), maxLines: 1, overflow: TextOverflow.ellipsis))
-                        ],
-                      ),
-                    )
-                  else if (_recipe.author != null)
-                     Text("by ${_recipe.author}", style: const TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
-
-                  const SizedBox(height: 8),
-                  Text(_recipe.description, style: const TextStyle(color: Colors.grey, fontSize: 16)),
-                  const SizedBox(height: 20),
-                  
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _buildInfoChip(LucideIcons.clock, _recipe.prepTime),
-                      _buildInfoChip(LucideIcons.flame, _recipe.cookTime),
-                      _buildInfoChip(LucideIcons.users, '${_recipe.servings} pp'),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-
-                  TabBar(
-                    controller: _tabController,
-                    labelColor: const Color(0xFFC9A24D),
-                    unselectedLabelColor: Colors.grey,
-                    indicatorColor: const Color(0xFFC9A24D),
-                    tabs: const [Tab(text: 'Ingredients'), Tab(text: 'Steps')],
-                  ),
-                  const SizedBox(height: 20),
-
-                  if (_tabController.index == 0) ...[
-                    ..._recipe.ingredients.map((ing) => ListTile(
-                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                      leading: Container(
-                        width: 60, height: 60,
-                        decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
-                        child: ing.imageUrl != null 
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Image.network(ing.imageUrl!, fit: BoxFit.cover, errorBuilder: (_,__,___) => const Icon(LucideIcons.carrot))
-                              )
-                            : const Icon(LucideIcons.carrot),
-                      ),
-                      title: Text(ing.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text(ing.amount),
-                      trailing: IconButton(
-                        icon: const Icon(LucideIcons.mapPin, color: Color(0xFFC9A24D)),
-                        onPressed: () => _findStores(ing.name),
-                      ),
-                    )),
-                  ] else ...[
-                     ..._recipe.steps.asMap().entries.map((entry) => ListTile(
-                       contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                       leading: CircleAvatar(backgroundColor: const Color(0xFF2E2E2E), radius: 14, child: Text('${entry.key + 1}', style: const TextStyle(fontSize: 14, color: Color(0xFFC9A24D)))),
-                       title: Text(entry.value.instruction, style: const TextStyle(height: 1.4)),
-                       subtitle: entry.value.tip != null ? Text('Tip: ${entry.value.tip}', style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.w500)) : null,
-                     ))
-                  ],
-
-                  const SizedBox(height: 40),
-                  ReviewSection(
-                    reviews: const [], 
-                    isPremium: _isPremium,
-                    onAddReview: (rating, comment) {
-                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Thanks for your review!")));
-                    }, 
-                  ),
-                  const SizedBox(height: 100),
-                ],
-              ),
+          const SizedBox(height: 10),
+          if (_userProfile != null && _userProfile!.dietaryPreferences.isNotEmpty)
+            Row(children: [
+              const Icon(LucideIcons.leaf, size: 14, color: Colors.green),
+              const SizedBox(width: 8),
+              Text('Using preferences: ${_userProfile!.dietaryPreferences.join(', ')}', style: const TextStyle(color: Colors.green, fontSize: 12))
+            ]),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            onPressed: _generateFromText,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFC9A24D),
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
+            icon: const Icon(LucideIcons.wand2, color: Colors.white),
+            label: const Text('Generate & Sync', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          if (unsafe) {
-            showDialog(
-              context: context, 
-              builder: (ctx) => AlertDialog(
-                title: const Text("Safety Warning"),
-                content: Text("This recipe contains allergens: ${_recipe.allergens.join(', ')}. Please confirm you want to cook this."),
-                actions: [
-                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      _startCooking();
-                    },
-                    child: const Text("I Understand", style: TextStyle(color: Colors.white))
-                  )
-                ],
-              )
-            );
-          } else {
-             _startCooking();
-          }
-        },
-        backgroundColor: unsafe ? Colors.red : const Color(0xFFC9A24D),
-        icon: const Icon(LucideIcons.chefHat, color: Colors.white),
-        label: const Text('Start Cooking', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
     );
   }
 
-  Widget _buildInfoChip(IconData icon, String label) {
-    return Row(children: [
-      Icon(icon, size: 16, color: const Color(0xFFC9A24D)),
-      const SizedBox(width: 6),
-      Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
-    ]);
+  Widget _buildImageTab() {
+    if (_showOptions) {
+      return ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          const Text("We found these dishes:", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          ..._recipeOptions.map((opt) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: ListTile(
+              tileColor: const Color(0xFFF3F4F6),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              title: Text(opt, style: const TextStyle(fontWeight: FontWeight.bold)),
+              trailing: const Icon(LucideIcons.chevronRight, color: Color(0xFFC9A24D)),
+              onTap: () => _generateFromOption(opt),
+            ),
+          )),
+          TextButton(
+            onPressed: () => setState(() { _showOptions = false; _selectedImage = null; }),
+            child: const Text("Retake Photo", style: TextStyle(color: Colors.grey)),
+          )
+        ],
+      );
+    }
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (_selectedImage != null)
+           Padding(
+             padding: const EdgeInsets.all(20.0),
+             child: ClipRRect(
+               borderRadius: BorderRadius.circular(12),
+               child: Image.memory(_selectedImage!, height: 200, fit: BoxFit.cover),
+             ),
+           ),
+        OutlinedButton.icon(
+          onPressed: _pickImage,
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          icon: const Icon(LucideIcons.camera, color: Color(0xFFC9A24D), size: 32),
+          label: const Text('Take / Upload Photo', style: TextStyle(color: Color(0xFF2E2E2E), fontSize: 16)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildManualTab() {
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        TextField(
+          controller: _titleController,
+          decoration: const InputDecoration(labelText: "Recipe Title", border: OutlineInputBorder()),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _descriptionController,
+          decoration: const InputDecoration(labelText: "Description", border: OutlineInputBorder()),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(child: TextField(controller: _prepTimeController, decoration: const InputDecoration(labelText: "Prep (e.g. 10m)"))),
+            const SizedBox(width: 8),
+            Expanded(child: TextField(controller: _cookTimeController, decoration: const InputDecoration(labelText: "Cook (e.g. 20m)"))),
+            const SizedBox(width: 8),
+            Expanded(child: TextField(controller: _servingsController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Servings"))),
+          ],
+        ),
+        const Divider(height: 32),
+        const Text("Ingredients", style: TextStyle(fontWeight: FontWeight.bold)),
+        ..._manualIngredients.asMap().entries.map((entry) => ListTile(
+          dense: true,
+          title: Text(entry.value.name),
+          trailing: IconButton(icon: const Icon(LucideIcons.x, size: 16), onPressed: () => setState(() => _manualIngredients.removeAt(entry.key))),
+          subtitle: Text(entry.value.amount),
+        )),
+        Row(
+          children: [
+            Expanded(flex: 2, child: TextField(controller: _ingredientNameController, decoration: const InputDecoration(hintText: "Item"))),
+            const SizedBox(width: 8),
+            Expanded(child: TextField(controller: _ingredientAmountController, decoration: const InputDecoration(hintText: "Qty"))),
+            IconButton(icon: const Icon(LucideIcons.plusCircle, color: Color(0xFFC9A24D)), onPressed: _addManualIngredient)
+          ],
+        ),
+        const Divider(height: 32),
+        const Text("Steps", style: TextStyle(fontWeight: FontWeight.bold)),
+        ..._manualSteps.asMap().entries.map((entry) => ListTile(
+          dense: true,
+          leading: CircleAvatar(radius: 10, child: Text("${entry.key+1}", style: const TextStyle(fontSize: 10))),
+          title: Text(entry.value.instruction),
+          trailing: IconButton(icon: const Icon(LucideIcons.x, size: 16), onPressed: () => setState(() => _manualSteps.removeAt(entry.key))),
+        )),
+        Row(
+          children: [
+            Expanded(child: TextField(controller: _stepController, decoration: const InputDecoration(hintText: "Instruction"))),
+            IconButton(icon: const Icon(LucideIcons.plusCircle, color: Color(0xFFC9A24D)), onPressed: _addManualStep)
+          ],
+        ),
+        const SizedBox(height: 32),
+        ElevatedButton(
+          onPressed: _saveManualRecipe,
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC9A24D), padding: const EdgeInsets.symmetric(vertical: 16)),
+          child: const Text("Save Recipe", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        )
+      ],
+    );
   }
 }
