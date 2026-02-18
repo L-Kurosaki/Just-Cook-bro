@@ -14,7 +14,6 @@ String _cleanKey(String value) {
 }
 
 // CRITICAL FIX: We must use 'const String.fromEnvironment' directly here.
-// Passing it through a helper function prevents the compiler from reading the GitHub Secret.
 String _getApiKey() {
   const key = String.fromEnvironment('GEMINI_API_KEY');
   const keyAlt = String.fromEnvironment('key');
@@ -32,8 +31,7 @@ class GeminiService {
   late final GenerativeModel _visionModel;
 
   GeminiService() {
-    // We initialize even if empty so we can safely throw specific errors in the methods later
-    // rather than crashing the app immediately on startup.
+    // Initialize models. If key is missing, specific methods will throw clearer errors.
     _model = GenerativeModel(model: 'gemini-3-flash-preview', apiKey: _apiKey);
     _visionModel = GenerativeModel(model: 'gemini-3-flash-preview', apiKey: _apiKey);
   }
@@ -80,8 +78,9 @@ class GeminiService {
   // --- Recipe Generation ---
 
   Future<Recipe> generateRecipeFromText(String prompt, {UserProfile? profile}) async {
+    // 1. Check Key existence first
     if (_apiKey.isEmpty) {
-      throw Exception("API Key is missing. Please check GitHub Secrets configuration.");
+      throw Exception("API Key is missing. Check GitHub 'GEMINI_API_KEY' environment.");
     }
 
     String fullPrompt = 'Create a detailed cooking recipe for: "$prompt".';
@@ -112,12 +111,14 @@ class GeminiService {
       return _processRecipeResponse(data);
     } catch (e) {
       print('Gemini failed: $e');
+      // 2. Expose real errors
       if (e.toString().contains('API_KEY_INVALID')) {
-        throw Exception("The API Key is invalid or expired.");
+        throw Exception("Invalid API Key. Please check the key in GitHub Secrets.");
       }
-      if (e.toString().contains('403')) {
-        throw Exception("API Permission Denied (403). Check quotas.");
+      if (e.toString().contains('429')) {
+        throw Exception("Quota exceeded. The API key has reached its limit.");
       }
+      // Return the actual error message instead of generic "Try again"
       throw Exception("AI Error: ${e.toString().replaceAll('Exception:', '').trim()}");
     }
   }
@@ -144,8 +145,6 @@ class GeminiService {
       }
     } catch (e) {
       print("Vision validation failed: $e");
-      // If validation fails due to API error, we warn the user but might allow pass-through if it's a connection issue? 
-      // Safest is to rethrow.
       throw Exception("Could not validate image: ${e.toString()}");
     }
   }
