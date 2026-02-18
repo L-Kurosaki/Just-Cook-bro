@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:uuid/uuid.dart';
 import '../services/gemini_service.dart';
 import '../services/storage_service.dart';
 import '../services/supabase_service.dart';
@@ -34,10 +35,23 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> with SingleTickerProv
   List<String> _recipeOptions = [];
   bool _showOptions = false;
 
+  // Manual Entry State
+  final _titleController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  final _prepTimeController = TextEditingController();
+  final _cookTimeController = TextEditingController();
+  final _servingsController = TextEditingController();
+  
+  final List<Ingredient> _manualIngredients = [];
+  final List<Step> _manualSteps = [];
+  final _ingredientNameController = TextEditingController();
+  final _ingredientAmountController = TextEditingController();
+  final _stepController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this); // Changed to 3 tabs
     _loadProfile();
   }
 
@@ -48,8 +62,6 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> with SingleTickerProv
   Future<void> _generateFromText() async {
     if (_textController.text.isEmpty) return;
     
-    // Limits check: We could query count from DB, but for now assuming user is Pro or within reason
-    // Real logic would count Supabase recipes.
     setState(() { _loading = true; _statusMessage = "Analyzing input & Preferences..."; });
     try {
       final recipe = await _gemini.generateRecipeFromText(
@@ -88,7 +100,7 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> with SingleTickerProv
         _loading = false;
       });
     } catch (e) {
-      _showError("Could not identify food.");
+      _showError("Could not identify food. Try a clearer photo.");
       setState(() => _loading = false);
     }
   }
@@ -106,6 +118,32 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> with SingleTickerProv
        _showError(e.toString());
        setState(() => _loading = false);
     }
+  }
+
+  Future<void> _saveManualRecipe() async {
+    if (_titleController.text.isEmpty) {
+      _showError("Title is required");
+      return;
+    }
+    if (_manualIngredients.isEmpty || _manualSteps.isEmpty) {
+      _showError("Add at least one ingredient and one step");
+      return;
+    }
+
+    final recipe = Recipe(
+      id: const Uuid().v4(),
+      title: _titleController.text,
+      description: _descriptionController.text.isEmpty ? "My custom recipe" : _descriptionController.text,
+      prepTime: _prepTimeController.text.isEmpty ? "10m" : _prepTimeController.text,
+      cookTime: _cookTimeController.text.isEmpty ? "20m" : _cookTimeController.text,
+      servings: int.tryParse(_servingsController.text) ?? 2,
+      ingredients: _manualIngredients,
+      steps: _manualSteps,
+      author: _userProfile?.name ?? "Me",
+      isPremium: false,
+    );
+
+    await _handleGeneratedRecipe(recipe);
   }
 
   Future<void> _handleGeneratedRecipe(Recipe recipe) async {
@@ -131,7 +169,6 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> with SingleTickerProv
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // FIXED: Replaced invalid cloudCheck with Icons.cloud_done
               const Icon(Icons.cloud_done, size: 48, color: Colors.green),
               const SizedBox(height: 16),
               const Text("Saved to Cloud!", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
@@ -187,6 +224,28 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> with SingleTickerProv
     if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
   }
 
+  void _addManualIngredient() {
+    if (_ingredientNameController.text.isNotEmpty) {
+      setState(() {
+        _manualIngredients.add(Ingredient(
+          name: _ingredientNameController.text,
+          amount: _ingredientAmountController.text.isEmpty ? "Some" : _ingredientAmountController.text
+        ));
+        _ingredientNameController.clear();
+        _ingredientAmountController.clear();
+      });
+    }
+  }
+
+  void _addManualStep() {
+    if (_stepController.text.isNotEmpty) {
+      setState(() {
+        _manualSteps.add(Step(instruction: _stepController.text));
+        _stepController.clear();
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -201,8 +260,9 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> with SingleTickerProv
           unselectedLabelColor: Colors.grey,
           indicatorColor: const Color(0xFFC9A24D),
           tabs: const [
-            Tab(text: "Text / Link"),
-            Tab(text: "Camera / Image"),
+            Tab(text: "AI Chef"),
+            Tab(text: "Scan"),
+            Tab(text: "Manual"),
           ],
         ),
       ),
@@ -220,6 +280,7 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> with SingleTickerProv
             children: [
               _buildTextTab(),
               _buildImageTab(),
+              _buildManualTab(),
             ],
           ),
     );
@@ -311,6 +372,69 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> with SingleTickerProv
           icon: const Icon(LucideIcons.camera, color: Color(0xFFC9A24D), size: 32),
           label: const Text('Take / Upload Photo', style: TextStyle(color: Color(0xFF2E2E2E), fontSize: 16)),
         ),
+      ],
+    );
+  }
+
+  Widget _buildManualTab() {
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        TextField(
+          controller: _titleController,
+          decoration: const InputDecoration(labelText: "Recipe Title", border: OutlineInputBorder()),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _descriptionController,
+          decoration: const InputDecoration(labelText: "Description", border: OutlineInputBorder()),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(child: TextField(controller: _prepTimeController, decoration: const InputDecoration(labelText: "Prep (e.g. 10m)"))),
+            const SizedBox(width: 8),
+            Expanded(child: TextField(controller: _cookTimeController, decoration: const InputDecoration(labelText: "Cook (e.g. 20m)"))),
+            const SizedBox(width: 8),
+            Expanded(child: TextField(controller: _servingsController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Servings"))),
+          ],
+        ),
+        const Divider(height: 32),
+        const Text("Ingredients", style: TextStyle(fontWeight: FontWeight.bold)),
+        ..._manualIngredients.asMap().entries.map((entry) => ListTile(
+          dense: true,
+          title: Text(entry.value.name),
+          trailing: IconButton(icon: const Icon(LucideIcons.x, size: 16), onPressed: () => setState(() => _manualIngredients.removeAt(entry.key))),
+          subtitle: Text(entry.value.amount),
+        )),
+        Row(
+          children: [
+            Expanded(flex: 2, child: TextField(controller: _ingredientNameController, decoration: const InputDecoration(hintText: "Item"))),
+            const SizedBox(width: 8),
+            Expanded(child: TextField(controller: _ingredientAmountController, decoration: const InputDecoration(hintText: "Qty"))),
+            IconButton(icon: const Icon(LucideIcons.plusCircle, color: Color(0xFFC9A24D)), onPressed: _addManualIngredient)
+          ],
+        ),
+        const Divider(height: 32),
+        const Text("Steps", style: TextStyle(fontWeight: FontWeight.bold)),
+        ..._manualSteps.asMap().entries.map((entry) => ListTile(
+          dense: true,
+          leading: CircleAvatar(radius: 10, child: Text("${entry.key+1}", style: const TextStyle(fontSize: 10))),
+          title: Text(entry.value.instruction),
+          trailing: IconButton(icon: const Icon(LucideIcons.x, size: 16), onPressed: () => setState(() => _manualSteps.removeAt(entry.key))),
+        )),
+        Row(
+          children: [
+            Expanded(child: TextField(controller: _stepController, decoration: const InputDecoration(hintText: "Instruction"))),
+            IconButton(icon: const Icon(LucideIcons.plusCircle, color: Color(0xFFC9A24D)), onPressed: _addManualStep)
+          ],
+        ),
+        const SizedBox(height: 32),
+        ElevatedButton(
+          onPressed: _saveManualRecipe,
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC9A24D), padding: const EdgeInsets.symmetric(vertical: 16)),
+          child: const Text("Save Recipe", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        )
       ],
     );
   }
