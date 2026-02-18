@@ -22,8 +22,6 @@ String _getApiKey() {
   if (key.isNotEmpty && !key.startsWith('\$')) return _cleanKey(key);
   if (keyAlt.isNotEmpty && !keyAlt.startsWith('\$')) return _cleanKey(keyAlt);
   
-  // If the secret fails to load, the app will break.
-  // We return an empty string or a placeholder, but the real key MUST come from the build.
   return ''; 
 }
 
@@ -34,10 +32,8 @@ class GeminiService {
   late final GenerativeModel _visionModel;
 
   GeminiService() {
-    // Check if key is valid to prevent crashing with a confusing error
-    if (_apiKey.isEmpty || _apiKey.startsWith('AIzaSyA4wudATZ2vLf3s')) {
-       print("WARNING: Gemini API Key appears to be missing or is the old invalid key.");
-    }
+    // We initialize even if empty so we can safely throw specific errors in the methods later
+    // rather than crashing the app immediately on startup.
     _model = GenerativeModel(model: 'gemini-3-flash-preview', apiKey: _apiKey);
     _visionModel = GenerativeModel(model: 'gemini-3-flash-preview', apiKey: _apiKey);
   }
@@ -84,6 +80,10 @@ class GeminiService {
   // --- Recipe Generation ---
 
   Future<Recipe> generateRecipeFromText(String prompt, {UserProfile? profile}) async {
+    if (_apiKey.isEmpty) {
+      throw Exception("API Key is missing. Please check GitHub Secrets configuration.");
+    }
+
     String fullPrompt = 'Create a detailed cooking recipe for: "$prompt".';
     String sourceUrl = "";
 
@@ -112,13 +112,21 @@ class GeminiService {
       return _processRecipeResponse(data);
     } catch (e) {
       print('Gemini failed: $e');
-      throw Exception("Failed to generate recipe. Please try again.");
+      if (e.toString().contains('API_KEY_INVALID')) {
+        throw Exception("The API Key is invalid or expired.");
+      }
+      if (e.toString().contains('403')) {
+        throw Exception("API Permission Denied (403). Check quotas.");
+      }
+      throw Exception("AI Error: ${e.toString().replaceAll('Exception:', '').trim()}");
     }
   }
 
   // --- SAFETY CHECK & VISION ---
 
   Future<void> _validateImageIsFood(Uint8List imageBytes) async {
+    if (_apiKey.isEmpty) throw Exception("API Key is missing.");
+
     final prompt = "Is this image a food item, a dish, or a cooking ingredient? Answer only YES or NO.";
     final content = [
       Content.multi([
@@ -127,11 +135,18 @@ class GeminiService {
       ])
     ];
 
-    final response = await _visionModel.generateContent(content);
-    final text = response.text?.trim().toUpperCase() ?? "NO";
+    try {
+      final response = await _visionModel.generateContent(content);
+      final text = response.text?.trim().toUpperCase() ?? "NO";
 
-    if (!text.contains("YES")) {
-      throw Exception("Image does not appear to be food. Please upload a valid cooking ingredient or dish.");
+      if (!text.contains("YES")) {
+        throw Exception("Image does not appear to be food. Please upload a valid cooking ingredient or dish.");
+      }
+    } catch (e) {
+      print("Vision validation failed: $e");
+      // If validation fails due to API error, we warn the user but might allow pass-through if it's a connection issue? 
+      // Safest is to rethrow.
+      throw Exception("Could not validate image: ${e.toString()}");
     }
   }
 
@@ -155,7 +170,7 @@ class GeminiService {
       return list.map((e) => e.toString()).toList();
     } catch (e) {
       print("Vision failed: $e");
-      return ["Recipe Idea 1", "Recipe Idea 2", "Recipe Idea 3"]; 
+      throw Exception("Failed to analyze image: $e");
     }
   }
 
@@ -203,6 +218,8 @@ class GeminiService {
   // --- Real Location Services (In-App) ---
 
   Future<List<Map<String, String>>> findShopsNearby(String ingredient) async {
+    if (_apiKey.isEmpty) return [];
+    
     // 1. Get Coordinates
     try {
       Position position = await _determinePosition();
@@ -256,6 +273,7 @@ class GeminiService {
   }
 
   Future<String> getCookingHelp(String instruction) async {
+    if (_apiKey.isEmpty) return 'Cooking assistant offline.';
     try {
       final response = await _model.generateContent([
         Content.text('Cooking step: "$instruction". Give a short, funny or encouraging tip (max 15 words).')
