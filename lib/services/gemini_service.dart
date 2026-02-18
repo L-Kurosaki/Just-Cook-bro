@@ -5,27 +5,39 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart';
 import '../models.dart';
 
-String _getEnv(String key, String fallbackValue, {String? altKey}) {
-  String value = String.fromEnvironment(key);
-  if ((value.isEmpty || value.startsWith('\$')) && altKey != null) {
-    value = String.fromEnvironment(altKey);
-  }
-  if (value.isEmpty || value.startsWith('\$')) {
-    return fallbackValue;
-  }
-  if (value.startsWith('"') && value.endsWith('"')) {
-    value = value.substring(1, value.length - 1);
+// Helper to clean quotes if they get stuck in the build process
+String _cleanKey(String value) {
+  if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+    return value.substring(1, value.length - 1);
   }
   return value;
 }
 
-final String _apiKey = _getEnv('GEMINI_API_KEY', 'AIzaSyA4wudATZ2vLf3s-OaZKEEBBv37z7jjnaA', altKey: 'key');
+// CRITICAL FIX: We must use 'const String.fromEnvironment' directly here.
+// Passing it through a helper function prevents the compiler from reading the GitHub Secret.
+String _getApiKey() {
+  const key = String.fromEnvironment('GEMINI_API_KEY');
+  const keyAlt = String.fromEnvironment('key');
+  
+  if (key.isNotEmpty && !key.startsWith('\$')) return _cleanKey(key);
+  if (keyAlt.isNotEmpty && !keyAlt.startsWith('\$')) return _cleanKey(keyAlt);
+  
+  // If the secret fails to load, the app will break.
+  // We return an empty string or a placeholder, but the real key MUST come from the build.
+  return ''; 
+}
+
+final String _apiKey = _getApiKey();
 
 class GeminiService {
   late final GenerativeModel _model;
   late final GenerativeModel _visionModel;
 
   GeminiService() {
+    // Check if key is valid to prevent crashing with a confusing error
+    if (_apiKey.isEmpty || _apiKey.startsWith('AIzaSyA4wudATZ2vLf3s')) {
+       print("WARNING: Gemini API Key appears to be missing or is the old invalid key.");
+    }
     _model = GenerativeModel(model: 'gemini-3-flash-preview', apiKey: _apiKey);
     _visionModel = GenerativeModel(model: 'gemini-3-flash-preview', apiKey: _apiKey);
   }
@@ -194,12 +206,6 @@ class GeminiService {
     // 1. Get Coordinates
     try {
       Position position = await _determinePosition();
-      
-      // 2. Since we don't have Google Places API Key (paid), we use Gemini to "simulate" a local search
-      // or guide the user. However, to keep it "in-app" without a map view, we ask Gemini for chain stores
-      // or we can just return a generic list if we can't search.
-      // A better approach for "In App" without API keys is to ask Gemini to list stores in the general vicinity if we can reverse geocode,
-      // but simpler is to just return realistic options.
       
       final prompt = "I am at Latitude: ${position.latitude}, Longitude: ${position.longitude}. "
           "Recommend 3 real supermarket chains or grocery store names that are likely to exist near this location and would sell '$ingredient'. "
